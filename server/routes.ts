@@ -127,8 +127,7 @@ const MENTOR_TOOLS: Anthropic.Tool[] = [
         },
         language: {
           type: "string",
-          enum: ["javascript", "python"],
-          description: "Programming language for the challenge",
+          description: "Programming language for the challenge (e.g. 'javascript', 'python', 'java', 'cpp', 'rust')",
         },
       },
       required: ["topic", "difficulty", "language"],
@@ -162,7 +161,7 @@ const MENTOR_TOOLS: Anthropic.Tool[] = [
               },
               language: {
                 type: "string",
-                enum: ["javascript", "python"],
+                description: "Programming language for the topic",
               },
             },
             required: ["title", "description", "difficulty", "language"],
@@ -507,7 +506,7 @@ export async function registerRoutes(
   const generateSchema = z.object({
     topic: z.string().min(1).max(200),
     difficulty: z.enum(["Beginner", "Intermediate", "Advanced"]),
-    language: z.enum(["javascript", "python"]),
+    language: z.string(),
     planId: z.number().int().optional(),
   });
 
@@ -603,13 +602,6 @@ export async function registerRoutes(
   const evaluateSchema = z.object({
     code: z.string().min(1).max(50000),
     challengeId: z.number().int().positive(),
-    testResults: z.array(
-      z.object({
-        name: z.string(),
-        passed: z.boolean(),
-        message: z.string().optional(),
-      })
-    ),
     language: z.string(),
   });
 
@@ -619,7 +611,7 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid request body" });
       }
-      const { code, challengeId, testResults, language } = parsed.data;
+      const { code, challengeId, language } = parsed.data;
       const sessionId = getSessionId(req);
 
       const challenge = await storage.getChallenge(challengeId);
@@ -627,23 +619,28 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Challenge not found" });
       }
 
-      const passedCount = testResults.filter((t) => t.passed).length;
-      const totalCount = testResults.length;
-      const testScore =
-        totalCount > 0 ? Math.round((passedCount / totalCount) * 70) : 0;
+      // Parse test cases if they are stored as string
+      const testCases = typeof challenge.testCases === "string"
+        ? JSON.parse(challenge.testCases)
+        : challenge.testCases;
+
+      const challengeContext = {
+        title: challenge.title,
+        description: challenge.description,
+        solution: challenge.solution,
+        testCases: testCases || []
+      };
 
       const response = await anthropic.messages.create({
         model: MODELS.evaluation,
-        max_tokens: 1024,
+        max_tokens: 2048,
         messages: [
           {
             role: "user",
             content: buildEvaluationPrompt(
               code,
-              challenge,
-              language,
-              passedCount,
-              totalCount
+              challengeContext,
+              language
             ),
           },
         ],
@@ -659,19 +656,24 @@ export async function registerRoutes(
           .trim();
         evaluation = JSON.parse(cleaned);
       } catch {
+        // Fallback if JSON parsing fails
         evaluation = {
-          qualityScore: 15,
-          feedback: "Good attempt! Keep practicing.",
-          strengths: ["Submitted a solution"],
-          improvements: ["Review the failing tests"],
+          qualityScore: 10,
+          passCount: 0,
+          totalCount: 0,
+          feedback: "I had trouble evaluating your code completely. Please double check your syntax.",
+          strengths: ["Attempted solution"],
+          improvements: ["Check syntax"],
+          testResults: []
         };
       }
 
-      const totalScore = Math.min(
-        100,
-        testScore + (evaluation.qualityScore || 0)
-      );
-      const allPassed = passedCount === totalCount;
+      const passedCount = evaluation.passCount || 0;
+      const totalCount = evaluation.totalCount || (testCases ? testCases.length : 0) || 1;
+
+      const testScore = Math.round((passedCount / totalCount) * 70);
+      const totalScore = Math.min(100, testScore + (evaluation.qualityScore || 0));
+      const allPassed = passedCount === totalCount && totalCount > 0;
 
       const feedbackText = `Score: ${totalScore}/100\n${evaluation.feedback}\nStrengths: ${(evaluation.strengths || []).join(", ")}\nTo improve: ${(evaluation.improvements || []).join(", ")}`;
 
@@ -692,6 +694,7 @@ export async function registerRoutes(
         strengths: evaluation.strengths || [],
         improvements: evaluation.improvements || [],
         allPassed,
+        testResults: evaluation.testResults || []
       });
     } catch (error) {
       console.error("Error evaluating submission:", error);

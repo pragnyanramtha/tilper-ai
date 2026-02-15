@@ -332,17 +332,16 @@ export function buildChallengeGenerationPrompt(
     language: string,
     profile?: UserProfile
 ): string {
-    const langName = language === "python" ? "Python" : "JavaScript";
     const profileHint = profile?.name
         ? `The student's name is ${profile.name}${profile.experience ? `, experience level: ${profile.experience}` : ""}.`
         : "";
 
-    return `Generate a coding challenge for a teenage developer learning ${langName}.
+    return `Generate a coding challenge for a teenage developer learning ${language}.
 ${profileHint}
 
 Topic: ${topic}
 Difficulty: ${difficulty}
-Language: ${langName}
+Language: ${language}
 
 Return ONLY valid JSON (no markdown, no backticks) with this exact structure:
 {
@@ -369,30 +368,39 @@ Rules:
 
 export function buildEvaluationPrompt(
     code: string,
-    challenge: { title: string; description: string; solution: string },
-    language: string,
-    passedCount: number,
-    totalCount: number
+    challenge: { title: string; description: string; solution: string; testCases: any },
+    language: string
 ): string {
-    return `Evaluate this ${language} code submission for a coding challenge. Return ONLY valid JSON (no markdown).
+    return `You are an expert code evaluator/compiler. Evaluate this ${language} code submission for a coding challenge.
+    
+    Instead of running this code, I want you to SIMULATE the execution of the test cases against the user's code.
+    Be extremely strict and precise. Function names must match. Logic must be correct.
 
 Challenge: ${challenge.title}
 Description: ${challenge.description}
 Expected solution approach: ${challenge.solution}
+Test Cases: ${JSON.stringify(challenge.testCases)}
 
 Student's code:
-\`\`\`
+\`\`\`${language}
 ${code}
 \`\`\`
 
-Test results: ${passedCount}/${totalCount} passed
+Analyze the code. Does it compile/run? Does it solve the problem?
+Simulate each test case.
 
-Rate code quality (0-30 points) based on:
-- Readability and naming (0-10)
-- Efficiency (0-10)  
-- Best practices (0-10)
-
-Return JSON: {"qualityScore": number, "feedback": "2-3 sentence feedback for a teen learner — be encouraging but honest", "strengths": ["strength1"], "improvements": ["improvement1"]}`;
+Return ONLY valid JSON (no markdown) with this structure:
+{
+  "qualityScore": number, // 0-30 based on readability, efficiency, best practices
+  "passCount": number, // How many test cases passed
+  "totalCount": number, // Total number of test cases
+  "feedback": "2-3 sentence feedback for a teen learner — be encouraging but honest",
+  "strengths": ["strength1", "strength2"],
+  "improvements": ["improvement1", "improvement2"],
+  "testResults": [
+    { "name": "Test Case Name", "passed": boolean, "message": "Why it failed (if applicable)" }
+  ]
+}`;
 }
 
 export function buildPlanGenerationPrompt(

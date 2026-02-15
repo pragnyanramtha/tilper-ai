@@ -38,6 +38,8 @@ export function AppSidebar() {
     activeConversationId,
     setActiveConversationId,
     sessionId,
+    activePlanId,
+    setActivePlanId,
   } = useAppContext();
 
   const { data: challenges } = useQuery<Challenge[]>({
@@ -143,20 +145,19 @@ export function AppSidebar() {
                     <SidebarMenuItem key={plan.id}>
                       <SidebarMenuButton
                         asChild
+                        isActive={activePlanId === plan.id}
                         data-testid={`nav-plan-${plan.id}`}
                         className="rounded-lg hover:bg-white/10 transition-all duration-200"
+                        onClick={() => {
+                          setActivePlanId(plan.id);
+                          navigate("/");
+                        }}
                       >
-                        <a
-                          href="/"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            navigate("/");
-                          }}
-                        >
+                        <button className="w-full text-left flex items-center gap-2">
                           <BookOpen className="w-4 h-4 text-primary/80" />
                           <span className="truncate text-sm font-medium">{plan.title}</span>
                           <span className="ml-auto text-xs text-muted-foreground/60 bg-black/5 dark:bg-white/5 px-1.5 py-0.5 rounded-full">{completed}/{topics.length}</span>
-                        </a>
+                        </button>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   );

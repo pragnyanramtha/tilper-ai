@@ -35,6 +35,7 @@ interface EvaluationResult {
   strengths: string[];
   improvements: string[];
   allPassed: boolean;
+  testResults?: Array<{ passed: boolean; name: string; message?: string }>;
 }
 
 export default function IDEPage() {
@@ -125,22 +126,18 @@ export default function IDEPage() {
     setEvaluation(null);
 
     try {
-      const testCases = typeof challenge.testCases === "string"
-        ? JSON.parse(challenge.testCases)
-        : challenge.testCases;
-
-      const result = await runCode(code, testCases, challenge.language);
-      setOutput(result.output);
-      setTestResults(result.testResults);
-
       const evalRes = await apiRequest("POST", "/api/submissions/evaluate", {
         code,
         challengeId,
-        testResults: result.testResults,
         language: challenge.language,
       });
       const evalData: EvaluationResult = await evalRes.json();
       setEvaluation(evalData);
+
+      // If the backend returns test results (simulated), display them
+      if (evalData.testResults) {
+        setTestResults(evalData.testResults);
+      }
 
       queryClient.invalidateQueries({ queryKey: ["/api/progress"] });
       queryClient.invalidateQueries({ queryKey: ["/api/progress", challengeId] });
@@ -268,7 +265,7 @@ export default function IDEPage() {
     <CodeEditor
       code={code}
       onChange={setCode}
-      language={challenge.language === "python" ? "python" : "javascript"}
+      language={challenge.language}
       onRun={handleRun}
       onReset={handleReset}
       onSubmit={handleSubmit}
@@ -296,8 +293,8 @@ export default function IDEPage() {
         <span className="text-sm font-semibold truncate" data-testid="text-header-title">
           {challenge.title}
         </span>
-        <Badge variant="outline" className="text-xs ml-auto">
-          {challenge.language === "python" ? "Python" : "JavaScript"}
+        <Badge variant="outline" className="text-xs ml-auto uppercase">
+          {challenge.language}
         </Badge>
       </div>
 

@@ -23,7 +23,7 @@ interface EvaluationResult {
 interface CodeEditorProps {
   code: string;
   onChange: (value: string) => void;
-  language?: "javascript" | "python";
+  language?: string;
   onRun?: () => void;
   onReset?: () => void;
   onSubmit?: () => void;
@@ -58,7 +58,15 @@ export function CodeEditor({
     }
   }, [testResults]);
 
-  const extensions = language === "python" ? [python()] : [javascript({ jsx: true })];
+  // Determine extensions based on language string
+  const getExtensions = () => {
+    if (language === "python") return [python()];
+    if (language === "javascript" || language === "typescript" || language === "js" || language === "ts") return [javascript({ jsx: true })];
+    // For other languages, we could add more dynamic imports or just return empty for plain text
+    return [];
+  };
+
+  const extensions = getExtensions();
 
   const passedTests = testResults?.filter((t) => t.passed).length ?? 0;
   const totalTests = testResults?.length ?? 0;
@@ -68,8 +76,8 @@ export function CodeEditor({
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between gap-2 p-2 border-b bg-card dark:bg-[#141516]">
         <div className="flex items-center gap-2 flex-wrap">
-          <Badge variant="secondary" className="font-mono text-xs">
-            {language === "python" ? "PY" : "JS"}
+          <Badge variant="secondary" className="font-mono text-xs uppercase">
+            {language}
           </Badge>
           {!pyodideReady && language === "python" && (
             <Badge variant="outline" className="text-xs">
@@ -165,11 +173,10 @@ export function CodeEditor({
                   {testResults.map((test, i) => (
                     <div
                       key={i}
-                      className={`flex items-center gap-2 text-xs font-mono p-1.5 rounded-md ${
-                        test.passed
-                          ? "text-green-500 bg-green-500/10"
-                          : "text-red-400 bg-red-400/10"
-                      }`}
+                      className={`flex items-center gap-2 text-xs font-mono p-1.5 rounded-md ${test.passed
+                        ? "text-green-500 bg-green-500/10"
+                        : "text-red-400 bg-red-400/10"
+                        }`}
                       data-testid={`test-result-${i}`}
                     >
                       {test.passed ? (

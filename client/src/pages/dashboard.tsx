@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { PlanViewer } from "@/components/plan-viewer";
 import {
   Sparkles,
   Loader2,
@@ -50,7 +51,12 @@ export default function Dashboard() {
     activeConversationId,
     setActiveConversationId,
     sessionId,
+    activePlanId,
   } = useAppContext();
+
+  if (activePlanId) {
+    return <PlanViewer />;
+  }
 
   const [isStreaming, setIsStreaming] = useState(false);
   const [thinkingMessage, setThinkingMessage] = useState<string | null>(null);
