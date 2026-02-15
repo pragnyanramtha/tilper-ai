@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Send, Sparkles, Loader2 } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Send, Sparkles, Loader2, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -11,10 +11,12 @@ import { useAppContext } from "@/lib/app-context";
 import type { UserProfile, Challenge } from "@shared/schema";
 
 export function ChatPanel() {
-  const { mode, chatMessages, setChatMessages, activeChallengeId } = useAppContext();
+  const { mode, chatMessages, setChatMessages, activeChallengeId, activeConversationId, setActiveConversationId } = useAppContext();
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
+  const [thinking, setThinking] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const queryClient = useQueryClient();
 
   const { data: profile } = useQuery<UserProfile>({
     queryKey: ["/api/profile"],
@@ -29,7 +31,7 @@ export function ChatPanel() {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [chatMessages]);
+  }, [chatMessages, thinking, isStreaming]);
 
   // System prompt is built server-side. Frontend sends only mode signal.
   const getMinimalSystemHint = () => {
@@ -46,6 +48,7 @@ export function ChatPanel() {
     setChatMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsStreaming(true);
+    setThinking(null);
 
     const challengeCtx = challenge
       ? {
@@ -56,12 +59,36 @@ export function ChatPanel() {
       }
       : undefined;
 
+    let currentConvId = activeConversationId;
+
     try {
+      const sessionId = localStorage.getItem("codequest-session-id") || "demo-session";
+
+      // If no active conversation, create one
+      if (!currentConvId) {
+        const convRes = await fetch("/api/conversations", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-session-id": sessionId,
+          },
+          body: JSON.stringify({
+            title: content.slice(0, 30) + (content.length > 30 ? "..." : ""),
+          }),
+        });
+        if (convRes.ok) {
+          const conv = await convRes.json();
+          currentConvId = conv.id;
+          setActiveConversationId(conv.id);
+          queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+        }
+      }
+
       const response = await fetch("/api/mentor/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-session-id": localStorage.getItem("codequest-session-id") || "",
+          "x-session-id": sessionId,
         },
         body: JSON.stringify({
           messages: [...chatMessages, userMessage].map((m) => ({
@@ -70,6 +97,7 @@ export function ChatPanel() {
           })),
           systemPrompt: getMinimalSystemHint(),
           challengeContext: challengeCtx,
+          conversationId: currentConvId,
         }),
       });
 
@@ -80,7 +108,8 @@ export function ChatPanel() {
 
       const decoder = new TextDecoder();
       let assistantContent = "";
-      setChatMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+      // Don't add assistant message until we get actual content
+      let assistantMessageAdded = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -93,14 +122,43 @@ export function ChatPanel() {
           if (line.startsWith("data: ")) {
             try {
               const data = JSON.parse(line.slice(6));
+
+              if (data.thinking) {
+                setThinking(data.thinking);
+              }
+
+              if (data.done && currentConvId) {
+                // Save assistant message when done
+                await fetch(`/api/conversations/${currentConvId}/messages`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "x-session-id": sessionId,
+                  },
+                  body: JSON.stringify({
+                    role: "assistant",
+                    content: assistantContent,
+                  }),
+                });
+                setThinking(null);
+                break;
+              }
+
               if (data.content) {
+                setThinking(null); // Clear thinking when content starts
+                if (!assistantMessageAdded) {
+                  setChatMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+                  assistantMessageAdded = true;
+                }
                 assistantContent += data.content;
                 setChatMessages((prev) => {
                   const updated = [...prev];
-                  updated[updated.length - 1] = {
-                    role: "assistant",
-                    content: assistantContent,
-                  };
+                  if (updated[updated.length - 1].role === "assistant") {
+                    updated[updated.length - 1] = {
+                      role: "assistant",
+                      content: assistantContent,
+                    };
+                  }
                   return updated;
                 });
               }
@@ -108,9 +166,10 @@ export function ChatPanel() {
           }
         }
       }
-    } catch {
+    } catch (error) {
+      console.error("Chat error:", error);
       setChatMessages((prev) => [
-        ...prev.slice(0, -1),
+        ...prev,
         {
           role: "assistant",
           content: "I'm having trouble connecting right now. Please try again in a moment.",
@@ -118,6 +177,7 @@ export function ChatPanel() {
       ]);
     } finally {
       setIsStreaming(false);
+      setThinking(null);
     }
   };
 
@@ -163,7 +223,7 @@ export function ChatPanel() {
 
       <ScrollArea className="flex-1 min-h-0" ref={scrollRef}>
         <div className="p-4 space-y-6">
-          {chatMessages.length === 0 && (
+          {chatMessages.length === 0 && !isStreaming && (
             <div className="flex flex-col items-center justify-center py-20 text-center px-6">
               <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 mb-6 shadow-inner ring-1 ring-white/10">
                 <Sparkles className="w-8 h-8 text-primary" />
@@ -216,10 +276,26 @@ export function ChatPanel() {
             </div>
           ))}
 
-          {isStreaming && chatMessages[chatMessages.length - 1]?.content === "" && (
-            <div className="flex items-center gap-2 text-muted-foreground text-xs pl-8">
-              <Loader2 className="w-3 h-3 animate-spin" />
-              Thinking...
+          {isStreaming && (
+            <div className="flex gap-3 justify-start animate-in fade-in duration-300">
+              <Avatar className="w-8 h-8 flex-shrink-0 mt-1 shadow-sm ring-1 ring-white/20">
+                <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/5 text-primary text-xs font-semibold">
+                  AI
+                </AvatarFallback>
+              </Avatar>
+              <div className="glass-panel rounded-2xl px-5 py-3.5 flex flex-col gap-2">
+                {thinking && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground/80 font-medium pb-1 border-b border-white/5 mb-1">
+                    <Wrench className="w-3 h-3 animate-pulse" />
+                    <span>{thinking}</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-1">
+                  <div className="w-1.5 h-1.5 bg-primary/60 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                  <div className="w-1.5 h-1.5 bg-primary/60 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                  <div className="w-1.5 h-1.5 bg-primary/60 rounded-full animate-bounce" />
+                </div>
+              </div>
             </div>
           )}
         </div>

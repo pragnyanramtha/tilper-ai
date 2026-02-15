@@ -435,32 +435,100 @@ export function buildAnimationPrompt(
     title: string,
     description: string
 ): string {
-    return `Generate a visual step-by-step walkthrough showing how to solve this specific coding challenge. Focus on the ALGORITHM and APPROACH, not just data structure definitions.
+    return `You are an expert at creating educational programming animations similar to 3Blue1Brown and Manim style. Generate a sequence of animation steps to visualize the concept: "${topic}".
 
-Topic: ${topic}
-Title: ${title}
+Challenge: ${title}
 Description: ${description}
 
-Create 6-8 animation steps that walk through:
-1. Understanding the problem (what input/output looks like)
-2. The key insight or approach
-3. Step-by-step algorithm walkthrough with a small example
-4. The final solution idea
+CRITICAL RULES:
+- PRIORITIZE VISUAL DIAGRAMS over text explanations
+- Use "diagram" type for 70-80% of steps
+- Keep text steps SHORT (max 10 words) and only for key insights
+- Show, don't tell - use visuals to explain concepts
+- Each animation should be primarily VISUAL and DIAGRAMMATIC
+- Set duration to 5-8 seconds for diagrams (slow, smooth animations)
+- Set duration to 2-3 seconds for text/highlights (quick transitions)
 
-Use the student's preferred language for any code examples (based on the challenge language, NOT C++).
+Create 6-10 animation steps following this structure:
+1. Start with a brief highlight (1 step, 2s duration)
+2. Show 4-6 DIAGRAM steps demonstrating the concept visually (5-8s each)
+3. Add 1-2 short code examples if relevant (3-4s each)
+4. End with a brief motivational text (1 step, 2s duration)
 
-Return a JSON array of animation steps. Each step should be an object with:
-- type: "text" | "code" | "diagram" | "highlight" | "comparison" | "steps"
-- content: the text/code/diagram-keyword to display
-- duration: number of seconds (2-5)
-- color: optional hex color (use #d97757 for accent, #a8cc8c for success, #e06c75 for error)
-- fontSize: optional font size for text type (14-24)
-- subtitle: optional secondary text to show below main content
+Available diagram types (USE THESE HEAVILY):
+- "tree" - Binary trees, BST, tree traversal
+- "stack" - LIFO data structure, push/pop operations
+- "queue" - FIFO data structure, enqueue/dequeue
+- "linkedlist" - Linked list with nodes and pointers
+- "sorting" - Sorting algorithms, array manipulation
+- "hashmap" - Hash tables, dictionaries, key-value pairs
+- "array" - Arrays with indices, array operations
+- "loop" - Loop iterations, for/while loops
+- "graph" - Graphs with vertices and edges, BFS/DFS
+- "function" - Function calls, input/output flow
+- "conditional" - If/else branching, decision trees
+- "variables" - Variable types, data types
 
-For diagram type, use keywords: "array", "linked-list", "stack", "queue", "tree", "sorting", "loop", "recursion", "flow", "hashmap", "graph"
-For "comparison" type, content should be "left_label|right_label|left_code|right_code"
-For "steps" type, content should be step descriptions separated by "|"
+Step types:
+1. "diagram" - Visual representation (USE THIS MOST - 70-80% of steps)
+2. "highlight" - Brief key point (max 5 words)
+3. "code" - Code snippet (use \\n for newlines, keep under 5 lines)
+4. "text" - Short explanation (max 10 words, use sparingly)
 
-Focus on showing the logic flow and problem-solving process for THIS specific challenge, using examples from the description.
-Return ONLY a valid JSON array, no markdown wrapping.`;
+EXAMPLE (Good - Diagram-heavy with proper durations):
+[
+  {
+    "type": "highlight",
+    "content": "Binary Search Tree",
+    "duration": 2,
+    "color": "#d97757"
+  },
+  {
+    "type": "diagram",
+    "content": "tree",
+    "duration": 6
+  },
+  {
+    "type": "diagram",
+    "content": "tree",
+    "duration": 6
+  },
+  {
+    "type": "text",
+    "content": "Left < Parent < Right",
+    "duration": 2,
+    "fontSize": 14
+  },
+  {
+    "type": "diagram",
+    "content": "tree",
+    "duration": 7
+  },
+  {
+    "type": "code",
+    "content": "def insert(node, val):\\n  if val < node.val:\\n    node.left = insert(node.left, val)",
+    "duration": 4
+  },
+  {
+    "type": "diagram",
+    "content": "tree",
+    "duration": 6
+  },
+  {
+    "type": "text",
+    "content": "O(log n) search time!",
+    "duration": 2,
+    "fontSize": 14
+  }
+]
+
+BAD EXAMPLE (Too much text):
+[
+  {"type": "text", "content": "Let me explain binary search trees...", "duration": 3},
+  {"type": "text", "content": "They are hierarchical data structures...", "duration": 3},
+  {"type": "diagram", "content": "tree", "duration": 2}
+]
+
+Return ONLY valid JSON array (no markdown, no explanation). Make it VISUAL and DIAGRAMMATIC!`;
 }
+

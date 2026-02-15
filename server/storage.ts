@@ -5,6 +5,8 @@ import {
   userProgress,
   userProfiles,
   learningPlans,
+  conversations,
+  messages,
   type User,
   type InsertUser,
   type Challenge,
@@ -14,6 +16,10 @@ import {
   type InsertUserProfile,
   type LearningPlan,
   type InsertLearningPlan,
+  type Conversation,
+  type InsertConversation,
+  type Message,
+  type InsertMessage,
 } from "@shared/schema";
 import { eq, and, asc, desc, or, isNull } from "drizzle-orm";
 
@@ -38,6 +44,13 @@ export interface IStorage {
   getProgress(sessionId: string): Promise<UserProgress[]>;
   getProgressForChallenge(sessionId: string, challengeId: number): Promise<UserProgress | undefined>;
   upsertProgress(sessionId: string, challengeId: number, status: string, userCode?: string, score?: number, aiFeedback?: string): Promise<UserProgress>;
+
+  // Conversation methods
+  getConversations(sessionId: string): Promise<Conversation[]>;
+  getConversation(id: number): Promise<Conversation | undefined>;
+  createConversation(conversation: InsertConversation): Promise<Conversation>;
+  getMessages(conversationId: number): Promise<Message[]>;
+  createMessage(message: InsertMessage): Promise<Message>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -129,6 +142,7 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
+  async getProgress(sessionId: string): Promise<UserProgress[]>;
   async getProgress(sessionId: string): Promise<UserProgress[]> {
     return db.select().from(userProgress).where(eq(userProgress.sessionId, sessionId));
   }
@@ -170,6 +184,29 @@ export class DatabaseStorage implements IStorage {
       .returning();
     return created;
   }
+
+  async getConversations(sessionId: string): Promise<Conversation[]> {
+    return db.select().from(conversations).where(eq(conversations.sessionId, sessionId)).orderBy(desc(conversations.createdAt));
+  }
+
+  async getConversation(id: number): Promise<Conversation | undefined> {
+    const [conversation] = await db.select().from(conversations).where(eq(conversations.id, id));
+    return conversation;
+  }
+
+  async createConversation(conversation: InsertConversation): Promise<Conversation> {
+    const [created] = await db.insert(conversations).values(conversation).returning();
+    return created;
+  }
+
+  async getMessages(conversationId: number): Promise<Message[]> {
+    return db.select().from(messages).where(eq(messages.conversationId, conversationId)).orderBy(asc(messages.createdAt));
+  }
+
+  async createMessage(message: InsertMessage): Promise<Message> {
+    const [created] = await db.insert(messages).values(message).returning();
+    return created;
+  }
 }
 
 export class MemStorage implements IStorage {
@@ -178,6 +215,8 @@ export class MemStorage implements IStorage {
   private learningPlans: Map<number, LearningPlan>;
   private challenges: Map<number, Challenge>;
   private userProgress: Map<number, UserProgress>;
+  private conversations: Map<number, Conversation>;
+  private messages: Map<number, Message>;
   private currentIds: { [key: string]: number };
 
   constructor() {
@@ -186,7 +225,9 @@ export class MemStorage implements IStorage {
     this.learningPlans = new Map();
     this.challenges = new Map();
     this.userProgress = new Map();
-    this.currentIds = { userProfiles: 1, learningPlans: 1, challenges: 1, userProgress: 1 };
+    this.conversations = new Map();
+    this.messages = new Map();
+    this.currentIds = { userProfiles: 1, learningPlans: 1, challenges: 1, userProgress: 1, conversations: 1, messages: 1 };
   }
 
   async getUser(id: string): Promise<User | undefined> {
@@ -334,6 +375,45 @@ export class MemStorage implements IStorage {
       completedAt: status === "completed" ? new Date() : null,
     };
     this.userProgress.set(id, created);
+    return created;
+  }
+
+  async getConversations(sessionId: string): Promise<Conversation[]> {
+    return Array.from(this.conversations.values())
+      .filter((c) => c.sessionId === sessionId)
+      .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
+  }
+
+  async getConversation(id: number): Promise<Conversation | undefined> {
+    return this.conversations.get(id);
+  }
+
+  async createConversation(conversation: InsertConversation): Promise<Conversation> {
+    const id = this.currentIds.conversations++;
+    const created: Conversation = {
+      id,
+      sessionId: conversation.sessionId,
+      title: conversation.title,
+      createdAt: new Date(),
+    };
+    this.conversations.set(id, created);
+    return created;
+  }
+
+  async getMessages(conversationId: number): Promise<Message[]> {
+    return Array.from(this.messages.values())
+      .filter((m) => m.conversationId === conversationId)
+      .sort((a, b) => (a.createdAt?.getTime() ?? 0) - (b.createdAt?.getTime() ?? 0));
+  }
+
+  async createMessage(message: InsertMessage): Promise<Message> {
+    const id = this.currentIds.messages++;
+    const created: Message = {
+      id,
+      ...message,
+      createdAt: new Date(),
+    };
+    this.messages.set(id, created);
     return created;
   }
 }

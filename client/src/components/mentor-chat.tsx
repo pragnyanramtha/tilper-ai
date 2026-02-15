@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Sparkles, Loader2 } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Sparkles, Loader2, Wrench } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChatInput } from "@/components/chat-input";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useAppContext } from "@/lib/app-context";
 import type { UserProfile } from "@shared/schema";
 
 interface ChatMessage {
@@ -25,10 +26,18 @@ interface MentorChatProps {
 }
 
 export function MentorChat({ challengeContext, compact = false, currentCode }: MentorChatProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const {
+    chatMessages: messages,
+    setChatMessages: setMessages,
+    activeConversationId,
+    setActiveConversationId
+  } = useAppContext();
+
   const [isStreaming, setIsStreaming] = useState(false);
+  const [thinkingMessage, setThinkingMessage] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const queryClient = useQueryClient();
 
   const { data: profile } = useQuery<UserProfile>({
     queryKey: ["/api/profile"],
@@ -44,7 +53,7 @@ export function MentorChat({ challengeContext, compact = false, currentCode }: M
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, thinkingMessage, isStreaming]);
 
   // System prompt is built server-side. We just send context signals.
   const getMinimalSystemHint = () => {
@@ -60,17 +69,49 @@ export function MentorChat({ challengeContext, compact = false, currentCode }: M
     const userMessage: ChatMessage = { role: "user", content: content.trim() };
     setMessages((prev) => [...prev, userMessage]);
     setIsStreaming(true);
+    setThinkingMessage(null);
 
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
 
+    let currentConvId = activeConversationId;
+
     try {
+      const sessionId = (() => {
+        let id = localStorage.getItem("codequest-session-id");
+        if (!id) {
+          id = Math.random().toString(36).substring(2, 11);
+          localStorage.setItem("codequest-session-id", id);
+        }
+        return id;
+      })();
+
+      // If no active conversation, create one
+      if (!currentConvId) {
+        const convRes = await fetch("/api/conversations", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-session-id": sessionId,
+          },
+          body: JSON.stringify({
+            title: content.slice(0, 30) + (content.length > 30 ? "..." : ""),
+          }),
+        });
+        if (convRes.ok) {
+          const conv = await convRes.json();
+          currentConvId = conv.id;
+          setActiveConversationId(conv.id);
+          queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+        }
+      }
+
       const response = await fetch("/api/mentor/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-session-id": localStorage.getItem("codequest-session-id") || "",
+          "x-session-id": sessionId,
         },
         body: JSON.stringify({
           messages: [...messages, userMessage].map((m) => ({
@@ -81,6 +122,7 @@ export function MentorChat({ challengeContext, compact = false, currentCode }: M
           mode: "learn",
           challengeContext,
           currentCode,
+          conversationId: currentConvId,
         }),
         signal: controller.signal,
       });
@@ -92,7 +134,7 @@ export function MentorChat({ challengeContext, compact = false, currentCode }: M
 
       const decoder = new TextDecoder();
       let assistantContent = "";
-      setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+      let assistantMessageAdded = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -105,24 +147,60 @@ export function MentorChat({ challengeContext, compact = false, currentCode }: M
           if (line.startsWith("data: ")) {
             try {
               const data = JSON.parse(line.slice(6));
+
+              if (data.thinking) {
+                setThinkingMessage(data.thinking);
+              }
+
               if (data.content) {
+                setThinkingMessage(null);
+                if (!assistantMessageAdded) {
+                  setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+                  assistantMessageAdded = true;
+                }
                 assistantContent += data.content;
                 setMessages((prev) => {
                   const updated = [...prev];
-                  updated[updated.length - 1] = {
-                    role: "assistant",
-                    content: assistantContent,
-                  };
+                  if (updated[updated.length - 1].role === "assistant") {
+                    updated[updated.length - 1] = {
+                      role: "assistant",
+                      content: assistantContent,
+                    };
+                  }
                   return updated;
                 });
+              }
+
+              if (data.done && currentConvId) {
+                // Save assistant message when done
+                await fetch(`/api/conversations/${currentConvId}/messages`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "x-session-id": sessionId,
+                  },
+                  body: JSON.stringify({
+                    role: "assistant",
+                    content: assistantContent,
+                  }),
+                });
+                break;
+              }
+
+              if (data.toolResult) {
+                if (data.toolResult.type === "challenge_created") {
+                  queryClient.invalidateQueries({ queryKey: ["/api/challenges"] });
+                }
               }
             } catch { }
           }
         }
       }
-    } catch {
+    } catch (err: any) {
+      if (err.name === 'AbortError') return;
+      console.error("Mentor chat error:", err);
       setMessages((prev) => [
-        ...prev.slice(0, -1),
+        ...prev,
         {
           role: "assistant",
           content: "I'm having trouble connecting right now. Please try again.",
@@ -130,6 +208,7 @@ export function MentorChat({ challengeContext, compact = false, currentCode }: M
       ]);
     } finally {
       setIsStreaming(false);
+      setThinkingMessage(null);
     }
   };
 
@@ -168,8 +247,8 @@ export function MentorChat({ challengeContext, compact = false, currentCode }: M
               )}
               <div
                 className={`max-w-[85%] rounded-md px-3 py-2 text-sm ${msg.role === "user"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted"
                   }`}
               >
                 {msg.role === "assistant" ? (
@@ -192,10 +271,26 @@ export function MentorChat({ challengeContext, compact = false, currentCode }: M
             </div>
           ))}
 
-          {isStreaming && messages[messages.length - 1]?.content === "" && (
-            <div className="flex items-center gap-2 text-muted-foreground text-xs pl-8">
-              <Loader2 className="w-3 h-3 animate-spin" />
-              Thinking...
+          {isStreaming && (
+            <div className="flex gap-2 justify-start animate-in fade-in duration-300">
+              <Avatar className={`${compact ? "w-6 h-6" : "w-7 h-7"} flex-shrink-0 mt-0.5`}>
+                <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                  <Sparkles className="w-3.5 h-3.5" />
+                </AvatarFallback>
+              </Avatar>
+              <div className="bg-muted rounded-md px-3 py-2 flex flex-col gap-1.5">
+                {thinkingMessage && (
+                  <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-medium pb-1 border-b border-white/5">
+                    <Wrench className="w-2.5 h-2.5 animate-pulse" />
+                    <span>{thinkingMessage}</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-1">
+                  <div className="w-1 h-1 bg-primary/60 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                  <div className="w-1 h-1 bg-primary/60 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                  <div className="w-1 h-1 bg-primary/60 rounded-full animate-bounce" />
+                </div>
+              </div>
             </div>
           )}
         </div>

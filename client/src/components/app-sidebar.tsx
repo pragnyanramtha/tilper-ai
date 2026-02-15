@@ -22,15 +22,22 @@ import {
   Plus,
   Settings,
   BookOpen,
+  MessageSquare,
 } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 import { useAppContext } from "@/lib/app-context";
-import type { Challenge, UserProgress, LearningPlan } from "@shared/schema";
+import type { Challenge, UserProgress, LearningPlan, Conversation } from "@shared/schema";
 
 export function AppSidebar() {
   const [location, navigate] = useLocation();
   const { theme, toggleTheme } = useTheme();
-  const { setChatMessages, setIsInChat, setMode } = useAppContext();
+  const {
+    setChatMessages,
+    setIsInChat,
+    setMode,
+    activeConversationId,
+    setActiveConversationId
+  } = useAppContext();
 
   const { data: challenges } = useQuery<Challenge[]>({
     queryKey: ["/api/challenges"],
@@ -44,6 +51,18 @@ export function AppSidebar() {
     queryKey: ["/api/plans"],
   });
 
+  const { data: conversations } = useQuery<Conversation[]>({
+    queryKey: ["/api/conversations"],
+    queryFn: async () => {
+      const sessionId = localStorage.getItem("codequest-session-id") || "demo-session";
+      const res = await fetch("/api/conversations", {
+        headers: { "x-session-id": sessionId }
+      });
+      if (!res.ok) throw new Error("Failed to fetch conversations");
+      return res.json();
+    }
+  });
+
   const progressMap: Record<number, UserProgress> = {};
   if (progressList) {
     for (const p of progressList) {
@@ -51,13 +70,32 @@ export function AppSidebar() {
     }
   }
 
-  const recentChallenges = (challenges || []).slice(0, 8);
-  const activePlans = (plans || []).filter(p => p.status === "active");
+  const recentChallenges = (challenges || []).slice(0, 8) as Challenge[];
+  const activePlans = (plans || []).filter(p => p.status === "active") as LearningPlan[];
+  const chatHistory = (conversations || []) as Conversation[];
 
   const handleNewChat = () => {
     setChatMessages([]);
     setIsInChat(false);
     setMode("plan");
+    setActiveConversationId(null);
+    navigate("/");
+  };
+
+  const handleConversationClick = async (conv: Conversation) => {
+    setActiveConversationId(conv.id);
+    setIsInChat(true);
+    setMode("learn");
+
+    // Fetch messages for this conversation
+    const res = await fetch(`/api/conversations/${conv.id}/messages`);
+    if (res.ok) {
+      const messages = await res.json();
+      setChatMessages(messages.map((m: any) => ({
+        role: m.role,
+        content: m.content
+      })));
+    }
     navigate("/");
   };
 
@@ -119,6 +157,35 @@ export function AppSidebar() {
                           <span className="truncate text-sm font-medium">{plan.title}</span>
                           <span className="ml-auto text-xs text-muted-foreground/60 bg-black/5 dark:bg-white/5 px-1.5 py-0.5 rounded-full">{completed}/{topics.length}</span>
                         </a>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {chatHistory.length > 0 && (
+          <SidebarGroup className="mb-4">
+            <SidebarGroupLabel className="text-xs font-semibold tracking-wider text-muted-foreground/70 uppercase px-2 mb-2">Chat History</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {chatHistory.map((conv) => {
+                  const isActive = activeConversationId === conv.id;
+                  return (
+                    <SidebarMenuItem key={conv.id}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isActive}
+                        data-testid={`nav-chat-${conv.id}`}
+                        className={`rounded-lg transition-all duration-200 ${isActive ? "bg-primary/10 text-primary font-medium" : "hover:bg-white/10"}`}
+                        onClick={() => handleConversationClick(conv)}
+                      >
+                        <button className="w-full flex items-center gap-2">
+                          <MessageSquare className={`w-4 h-4 ${isActive ? "text-primary" : "text-muted-foreground/60"}`} />
+                          <span className="truncate text-sm">{conv.title}</span>
+                        </button>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   );

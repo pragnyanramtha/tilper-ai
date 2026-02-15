@@ -34,6 +34,23 @@ function getSessionId(req: any): string {
   return req.headers["x-session-id"] as string;
 }
 
+function detectDiagramType(concept: string): string {
+  const c = concept.toLowerCase();
+  if (c.includes("tree") || c.includes("binary") || c.includes("bst")) return "tree";
+  if (c.includes("stack") || c.includes("lifo")) return "stack";
+  if (c.includes("queue") || c.includes("fifo")) return "queue";
+  if (c.includes("linked") || c.includes("node")) return "linkedlist";
+  if (c.includes("sort") || c.includes("bubble") || c.includes("merge")) return "sorting";
+  if (c.includes("hash") || c.includes("map") || c.includes("dict")) return "hashmap";
+  if (c.includes("array") || c.includes("list")) return "array";
+  if (c.includes("loop") || c.includes("iteration")) return "loop";
+  if (c.includes("graph") || c.includes("vertex")) return "graph";
+  if (c.includes("function") || c.includes("parameter")) return "function";
+  if (c.includes("condition") || c.includes("if")) return "conditional";
+  if (c.includes("variable") || c.includes("type")) return "variables";
+  return "flow";
+}
+
 async function webSearch(query: string): Promise<string> {
   try {
     const response = await fetch(
@@ -704,6 +721,31 @@ export async function registerRoutes(
     currentCode: z.string().max(50000).optional(),
   });
 
+  // Chat History Routes
+  app.get("/api/conversations", async (req, res) => {
+    const sessionId = req.headers["x-session-id"] as string;
+    if (!sessionId) return res.status(400).json({ message: "Session ID required" });
+    const convs = await storage.getConversations(sessionId);
+    res.json(convs);
+  });
+
+  app.get("/api/conversations/:id/messages", async (req, res) => {
+    const id = parseInt(req.params.id);
+    const msgs = await storage.getMessages(id);
+    res.json(msgs);
+  });
+
+  app.post("/api/conversations", async (req, res) => {
+    const sessionId = req.headers["x-session-id"] as string;
+    if (!sessionId) return res.status(400).json({ message: "Session ID required" });
+    const conv = await storage.createConversation({
+      sessionId,
+      title: req.body.title || "New Chat",
+    });
+    res.json(conv);
+  });
+
+  // Modify /api/mentor/chat to record history if conversationId is provided
   app.post("/api/mentor/chat", async (req, res) => {
     try {
       const parsed = chatSchema.safeParse(req.body);
@@ -712,8 +754,21 @@ export async function registerRoutes(
       }
       const { messages, challengeContext, currentCode } = parsed.data;
       const mode = parsed.data.mode || "learn";
+      const conversationId = req.body.conversationId; // Extract conversationId from req.body
 
       const sessionId = getSessionId(req);
+
+      // Save user message if conversation exists
+      if (conversationId && messages.length > 0) {
+        const lastUserMessage = messages[messages.length - 1];
+        if (lastUserMessage.role === "user") {
+          await storage.createMessage({
+            conversationId,
+            role: "user",
+            content: lastUserMessage.content,
+          });
+        }
+      }
 
       // Build rich, journey-aware context
       const studentContext = await buildStudentContext(
@@ -837,6 +892,8 @@ export async function registerRoutes(
       }
       const { topic, title, description } = parsed.data;
 
+      console.log(`Generating animation for: ${topic}`);
+
       const response = await anthropic.messages.create({
         model: MODELS.animation,
         max_tokens: 8192,
@@ -857,26 +914,52 @@ export async function registerRoutes(
           .replace(/```/g, "")
           .trim();
         steps = JSON.parse(cleaned);
-      } catch {
+
+        // Validate steps structure
+        if (!Array.isArray(steps) || steps.length === 0) {
+          throw new Error("Invalid steps format");
+        }
+
+        console.log(`Generated ${steps.length} animation steps`);
+      } catch (parseError) {
+        console.error("Failed to parse AI animation response:", parseError);
+        console.error("Raw response:", text.slice(0, 500));
+
+        // Fallback to diagram-heavy default animation
+        const diagramType = detectDiagramType(topic);
         steps = [
           {
             type: "highlight",
-            content: title,
+            content: title.slice(0, 30),
             duration: 2,
             color: "#d97757",
           },
           {
-            type: "text",
-            content: description.slice(0, 100),
-            duration: 3,
-            fontSize: 16,
+            type: "diagram",
+            content: diagramType,
+            duration: 6
           },
-          { type: "diagram", content: topic.toLowerCase(), duration: 4 },
+          {
+            type: "diagram",
+            content: diagramType,
+            duration: 6
+          },
           {
             type: "text",
-            content: "Practice makes perfect!",
+            content: description.slice(0, 50),
             duration: 2,
-            fontSize: 18,
+            fontSize: 14,
+          },
+          {
+            type: "diagram",
+            content: diagramType,
+            duration: 7
+          },
+          {
+            type: "text",
+            content: "Keep practicing!",
+            duration: 2,
+            fontSize: 14,
           },
         ];
       }

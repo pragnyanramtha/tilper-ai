@@ -16,6 +16,8 @@ interface AppContextValue {
   setActivePlanId: (id: number | null) => void;
   activeChallengeId: number | null;
   setActiveChallengeId: (id: number | null) => void;
+  activeConversationId: number | null;
+  setActiveConversationId: (id: number | null) => void;
   isInChat: boolean;
   setIsInChat: (v: boolean) => void;
 }
@@ -27,6 +29,7 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [activePlanId, setActivePlanId] = useState<number | null>(null);
   const [activeChallengeId, setActiveChallengeId] = useState<number | null>(null);
+  const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
   const [isInChat, setIsInChat] = useState(false);
 
   return (
@@ -40,6 +43,8 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
         setActivePlanId,
         activeChallengeId,
         setActiveChallengeId,
+        activeConversationId,
+        setActiveConversationId,
         isInChat,
         setIsInChat,
       }}

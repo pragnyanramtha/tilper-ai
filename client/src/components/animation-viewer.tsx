@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Play, Pause, RotateCcw, SkipForward, SkipBack, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -873,9 +873,37 @@ function ManimCanvas({ steps, isPlaying, onStepChange }: { steps: AnimationStep[
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [currentStep, setCurrentStep] = useState(0);
   const animFrameRef = useRef<number>(0);
-  const startTimeRef = useRef<number>(0);
+  const animationStartRef = useRef<number>(0);
 
-  const drawFrame = useCallback((stepIdx: number, stepProgress: number) => {
+  // Calculate total duration and step timings
+  const timeline = useMemo(() => {
+    const TRANSITION_DURATION = 0.8; // seconds
+    let currentTime = 0;
+    const stepTimings = steps.map((step, index) => {
+      const startTime = currentTime;
+      const transitionIn = index === 0 ? 0 : TRANSITION_DURATION;
+      const holdTime = step.duration;
+      const transitionOut = index === steps.length - 1 ? 0 : TRANSITION_DURATION;
+      const endTime = startTime + transitionIn + holdTime;
+      
+      currentTime = endTime;
+      
+      return {
+        startTime,
+        transitionInEnd: startTime + transitionIn,
+        holdEnd: startTime + transitionIn + holdTime,
+        endTime,
+        step
+      };
+    });
+    
+    return {
+      stepTimings,
+      totalDuration: currentTime
+    };
+  }, [steps]);
+
+  const drawFrame = useCallback((globalProgress: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -890,15 +918,83 @@ function ManimCanvas({ steps, isPlaying, onStepChange }: { steps: AnimationStep[
     const h = canvas.offsetHeight;
     const isDark = document.documentElement.classList.contains("dark");
 
+    // Clear canvas
     ctx.fillStyle = isDark ? "#1a1a19" : "#f0f3f3";
     ctx.fillRect(0, 0, w, h);
 
-    const step = steps[stepIdx];
-    if (!step) return;
+    const currentTime = globalProgress * timeline.totalDuration;
+    
+    // Find current and next steps
+    let currentStepIndex = 0;
+    let nextStepIndex = -1;
+    let blendFactor = 0;
 
-    const eased = ease(stepProgress);
-    ctx.globalAlpha = eased;
+    for (let i = 0; i < timeline.stepTimings.length; i++) {
+      const timing = timeline.stepTimings[i];
+      
+      if (currentTime >= timing.startTime && currentTime < timing.endTime) {
+        currentStepIndex = i;
+        
+        // Check if we're in transition to next step
+        if (currentTime >= timing.holdEnd && i < timeline.stepTimings.length - 1) {
+          nextStepIndex = i + 1;
+          const transitionProgress = (currentTime - timing.holdEnd) / 0.8;
+          blendFactor = ease(transitionProgress);
+        }
+        break;
+      }
+    }
 
+    // Update current step for progress dots
+    if (currentStepIndex !== currentStep) {
+      setCurrentStep(currentStepIndex);
+    }
+
+    // Draw current step (fading out if transitioning)
+    const currentTiming = timeline.stepTimings[currentStepIndex];
+    const stepProgress = Math.min(
+      (currentTime - currentTiming.transitionInEnd) / currentTiming.step.duration,
+      1
+    );
+    
+    if (nextStepIndex >= 0) {
+      ctx.globalAlpha = 1 - blendFactor;
+    } else {
+      ctx.globalAlpha = 1;
+    }
+    
+    drawStepContent(ctx, currentTiming.step, w, h, Math.max(0, stepProgress), isDark);
+
+    // Draw next step (fading in if transitioning)
+    if (nextStepIndex >= 0) {
+      ctx.globalAlpha = blendFactor;
+      drawStepContent(ctx, timeline.stepTimings[nextStepIndex].step, w, h, 0, isDark);
+    }
+
+    // Draw progress dots
+    ctx.globalAlpha = 1;
+    for (let i = 0; i < steps.length; i++) {
+      const dotX = w / 2 - (steps.length * 12) / 2 + i * 12 + 4;
+      const dotY = h - 16;
+      ctx.beginPath();
+      ctx.arc(dotX, dotY, 3, 0, Math.PI * 2);
+      ctx.fillStyle = i === currentStepIndex
+        ? ACCENT
+        : i < currentStepIndex
+          ? (isDark ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.2)")
+          : (isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)");
+      ctx.fill();
+    }
+  }, [steps, timeline, currentStep]);
+
+  const drawStepContent = useCallback((
+    ctx: CanvasRenderingContext2D,
+    step: AnimationStep,
+    w: number,
+    h: number,
+    progress: number,
+    isDark: boolean
+  ) => {
     if (step.type === "text") {
       const fontSize = step.fontSize || 18;
       ctx.font = `600 ${fontSize}px 'Space Grotesk', sans-serif`;
@@ -907,9 +1003,7 @@ function ManimCanvas({ steps, isPlaying, onStepChange }: { steps: AnimationStep[
       ctx.textBaseline = "middle";
       const x = step.position?.x ?? w / 2;
       const y = step.position?.y ?? h / 2;
-      const chars = step.content.split("");
-      const charsToShow = Math.floor(chars.length * eased);
-      ctx.fillText(chars.slice(0, charsToShow).join(""), x, y);
+      ctx.fillText(step.content, x, y);
     } else if (step.type === "code") {
       ctx.font = `14px 'JetBrains Mono', monospace`;
       const lines = step.content.split("\n");
@@ -922,9 +1016,9 @@ function ManimCanvas({ steps, isPlaying, onStepChange }: { steps: AnimationStep[
       roundRect(ctx, startX - bgPad, startY - bgPad - 4, w - 80, lines.length * lineHeight + bgPad * 2, 6);
       ctx.fill();
 
-      const linesToShow = Math.floor(lines.length * eased);
+      const linesToShow = Math.floor(lines.length * progress);
       for (let i = 0; i <= linesToShow && i < lines.length; i++) {
-        const lineProgress = i === linesToShow ? (eased * lines.length) % 1 : 1;
+        const lineProgress = i === linesToShow ? (progress * lines.length) % 1 : 1;
         const charsToShow = Math.floor(lines[i].length * lineProgress);
         const text = lines[i].slice(0, charsToShow);
         ctx.fillStyle = isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.15)";
@@ -934,35 +1028,21 @@ function ManimCanvas({ steps, isPlaying, onStepChange }: { steps: AnimationStep[
         highlightSyntax(ctx, text, startX + 8, startY + i * lineHeight, isDark);
       }
     } else if (step.type === "diagram") {
-      drawConceptDiagram(ctx, w, h, step.content, eased, isDark);
+      drawConceptDiagram(ctx, w, h, step.content, progress, isDark);
     } else if (step.type === "highlight") {
       const accentColor = step.color || ACCENT;
       ctx.font = `700 22px 'Space Grotesk', sans-serif`;
       ctx.fillStyle = accentColor;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      const scale = 0.8 + 0.2 * eased;
+      const scale = 0.8 + 0.2 * progress;
       ctx.save();
       ctx.translate(w / 2, h / 2);
       ctx.scale(scale, scale);
       ctx.fillText(step.content, 0, 0);
       ctx.restore();
     }
-
-    ctx.globalAlpha = 1;
-    for (let i = 0; i < steps.length; i++) {
-      const dotX = w / 2 - (steps.length * 12) / 2 + i * 12 + 4;
-      const dotY = h - 16;
-      ctx.beginPath();
-      ctx.arc(dotX, dotY, 3, 0, Math.PI * 2);
-      ctx.fillStyle = i === stepIdx
-        ? ACCENT
-        : i < stepIdx
-          ? (isDark ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.2)")
-          : (isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)");
-      ctx.fill();
-    }
-  }, [steps]);
+  }, []);
 
   useEffect(() => {
     if (!isPlaying) {
@@ -970,36 +1050,34 @@ function ManimCanvas({ steps, isPlaying, onStepChange }: { steps: AnimationStep[
       return;
     }
 
-    startTimeRef.current = Date.now();
+    animationStartRef.current = Date.now();
 
     const animate = () => {
-      const elapsed = Date.now() - startTimeRef.current;
-      const step = steps[currentStep];
-      if (!step) return;
+      const elapsed = (Date.now() - animationStartRef.current) / 1000; // seconds
+      const globalProgress = Math.min(elapsed / timeline.totalDuration, 1);
 
-      const stepProgress = Math.min(elapsed / (step.duration * 1000), 1);
+      drawFrame(globalProgress);
 
-      if (stepProgress >= 1 && currentStep < steps.length - 1) {
-        setCurrentStep((prev) => {
-          const next = prev + 1;
-          onStepChange?.(next);
-          return next;
-        });
-        startTimeRef.current = Date.now();
+      if (globalProgress < 1) {
+        animFrameRef.current = requestAnimationFrame(animate);
+      } else {
+        // Animation complete - draw final frame
+        drawFrame(1);
       }
-
-      drawFrame(currentStep, stepProgress);
-      animFrameRef.current = requestAnimationFrame(animate);
     };
 
     animFrameRef.current = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animFrameRef.current);
-  }, [isPlaying, currentStep, steps, drawFrame, onStepChange]);
+  }, [isPlaying, timeline, drawFrame]);
 
   useEffect(() => {
+    onStepChange?.(currentStep);
+  }, [currentStep, onStepChange]);
+
+  useEffect(() => {
+    // Draw initial frame when steps load
     if (steps.length > 0) {
-      setCurrentStep(0);
-      drawFrame(0, 0);
+      drawFrame(0);
     }
   }, [steps, drawFrame]);
 

@@ -46,6 +46,8 @@ export default function Dashboard() {
     isInChat,
     setIsInChat,
     setActiveChallengeId,
+    activeConversationId,
+    setActiveConversationId,
   } = useAppContext();
 
   const [isStreaming, setIsStreaming] = useState(false);
@@ -78,49 +80,43 @@ export default function Dashboard() {
     setIsInChat(true);
     setIsStreaming(true);
 
-    const lowerContent = content.toLowerCase();
-    if (
-      (lowerContent.includes("create") || lowerContent.includes("generate") || lowerContent.includes("build") || lowerContent.includes("make")) &&
-      (lowerContent.includes("plan") || lowerContent.includes("roadmap") || lowerContent.includes("learning path"))
-    ) {
-      try {
-        setChatMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-        const allMessages = [...chatMessages, userMessage];
-        const summary = allMessages.map((m) => `${m.role}: ${m.content}`).join("\n");
-        const res = await apiRequest("POST", "/api/plans/generate", { conversationSummary: summary });
-        const plan = await res.json();
-        queryClient.invalidateQueries({ queryKey: ["/api/plans"] });
-        const topics = (plan.topics as any[]) || [];
-        const topicList = topics.map((t: any, i: number) => `${i + 1}. **${t.title}** - ${t.description}`).join("\n");
-        setChatMessages((prev) => {
-          const updated = [...prev];
-          updated[updated.length - 1] = {
-            role: "assistant",
-            content: `I've created your personalized learning plan: **${plan.title}**!\n\nHere's what we'll cover:\n${topicList}\n\nYou can find it in the sidebar. Click any topic to start a challenge, or ask me to explain any concept first!`,
-          };
-          return updated;
-        });
-      } catch {
-        setChatMessages((prev) => {
-          const updated = [...prev];
-          updated[updated.length - 1] = {
-            role: "assistant",
-            content: "I had trouble creating your plan. Could you tell me more about what you want to learn?",
-          };
-          return updated;
-        });
-      } finally {
-        setIsStreaming(false);
-      }
-      return;
-    }
+    let currentConvId = activeConversationId;
 
     try {
+      const sessionId = (() => {
+        let id = localStorage.getItem("codequest-session-id");
+        if (!id) {
+          id = Math.random().toString(36).substring(2, 11);
+          localStorage.setItem("codequest-session-id", id);
+        }
+        return id;
+      })();
+
+      // If no active conversation, create one
+      if (!currentConvId) {
+        const convRes = await fetch("/api/conversations", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-session-id": sessionId,
+          },
+          body: JSON.stringify({
+            title: content.slice(0, 30) + (content.length > 30 ? "..." : ""),
+          }),
+        });
+        if (convRes.ok) {
+          const conv = await convRes.json();
+          currentConvId = conv.id;
+          setActiveConversationId(conv.id);
+          queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+        }
+      }
+
       const response = await fetch("/api/mentor/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-session-id": localStorage.getItem("codequest-session-id") || "",
+          "x-session-id": sessionId,
         },
         body: JSON.stringify({
           messages: [...chatMessages, userMessage].map((m) => ({
@@ -129,6 +125,7 @@ export default function Dashboard() {
           })),
           systemPrompt: getMinimalSystemHint(),
           mode,
+          conversationId: currentConvId,
         }),
       });
 
@@ -139,7 +136,7 @@ export default function Dashboard() {
 
       const decoder = new TextDecoder();
       let assistantContent = "";
-      setChatMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+      let assistantMessageAdded = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -157,15 +154,36 @@ export default function Dashboard() {
               }
               if (data.content) {
                 setThinkingMessage(null);
+                if (!assistantMessageAdded) {
+                  setChatMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+                  assistantMessageAdded = true;
+                }
                 assistantContent += data.content;
                 setChatMessages((prev) => {
                   const updated = [...prev];
-                  updated[updated.length - 1] = {
-                    role: "assistant",
-                    content: assistantContent,
-                  };
+                  if (updated[updated.length - 1].role === "assistant") {
+                    updated[updated.length - 1] = {
+                      role: "assistant",
+                      content: assistantContent,
+                    };
+                  }
                   return updated;
                 });
+              }
+              if (data.done && currentConvId) {
+                // Save assistant message when done
+                await fetch(`/api/conversations/${currentConvId}/messages`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "x-session-id": sessionId,
+                  },
+                  body: JSON.stringify({
+                    role: "assistant",
+                    content: assistantContent,
+                  }),
+                });
+                break;
               }
               if (data.toolResult) {
                 const toolData = data.toolResult;
@@ -181,9 +199,10 @@ export default function Dashboard() {
           }
         }
       }
-    } catch {
+    } catch (error) {
+      console.error("Dashboard chat error:", error);
       setChatMessages((prev) => [
-        ...prev.slice(0, -1),
+        ...prev,
         {
           role: "assistant",
           content: "I'm having trouble connecting right now. Please try again in a moment.",

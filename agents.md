@@ -73,6 +73,7 @@ An educational technology platform for teenage developers to learn coding throug
 - Wraps entire app for cross-component state sharing
 
 ## Recent Changes
+- Feb 15, 2026: Enhanced animation system with Manim-inspired approach, improved AI prompt for better educational visualizations, added Remotion framework for future video generation
 - Feb 15, 2026: Added Mentor tab to IDE page with contextual chat, upgraded animation system with 12+ diagram types (tree, stack, queue, linked list, sorting, hashmap, graph, conditional, function, variables)
 - Feb 15, 2026: Added agentic AI with tool-use (web search, challenge generation, learning plan creation, memory saving), modular ChatInput with file upload and mode badges
 - Feb 15, 2026: Redesigned to Claude.ai-style chat-first interface, renamed Build to Learn, removed right chat panel, added action pills, full settings page
