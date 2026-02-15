@@ -159,6 +159,18 @@ export function ChallengePanel({
 }
 
 export function ChallengeDetail({ challenge }: { challenge: Challenge }) {
+  let testCases: Array<{ name: string; input: any[]; expected: any; functionName: string }> = [];
+  try {
+    testCases = typeof challenge.testCases === "string"
+      ? JSON.parse(challenge.testCases)
+      : (challenge.testCases as any[]) || [];
+  } catch {
+    testCases = [];
+  }
+
+  const examples = testCases.slice(0, 2);
+  const functionName = examples[0]?.functionName || "solution";
+
   return (
     <div className="space-y-4">
       <div>
@@ -177,6 +189,46 @@ export function ChallengeDetail({ challenge }: { challenge: Challenge }) {
           {challenge.description}
         </p>
       </div>
+
+      <Card className="p-3" data-testid="card-what-to-do">
+        <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2">
+          What you need to do
+        </h4>
+        <p className="text-sm text-muted-foreground mb-2">
+          Implement the <code className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded">{functionName}</code> function
+          in {challenge.language === "python" ? "Python" : "JavaScript"}.
+        </p>
+        {examples.length > 0 && (
+          <div className="text-sm text-muted-foreground">
+            <span>It takes <strong>{examples[0].input.length}</strong> argument{examples[0].input.length !== 1 ? "s" : ""} and returns a result.</span>
+          </div>
+        )}
+      </Card>
+
+      {examples.length > 0 && (
+        <Card className="p-3" data-testid="card-examples">
+          <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2">
+            Examples
+          </h4>
+          <div className="space-y-3">
+            {examples.map((tc: any, i: number) => (
+              <div key={i} className="space-y-1.5" data-testid={`example-${i}`}>
+                <p className="text-xs font-medium text-muted-foreground">Example {i + 1}: {tc.name}</p>
+                <div className="bg-muted/50 rounded-md p-2.5 font-mono text-xs space-y-1">
+                  <div>
+                    <span className="text-muted-foreground">Input: </span>
+                    <span className="text-foreground">{tc.input.map((arg: any) => JSON.stringify(arg)).join(", ")}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Expected: </span>
+                    <span className="text-green-500">{JSON.stringify(tc.expected)}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {challenge.hints && challenge.hints.length > 0 && (
         <Card className="p-3">

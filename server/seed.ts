@@ -1,5 +1,5 @@
-import { db } from "./db";
-import { challenges } from "@shared/schema";
+import { type IStorage } from "./storage";
+import { type InsertChallenge } from "@shared/schema";
 
 const seedChallenges = [
   {
@@ -153,15 +153,18 @@ const seedChallenges = [
   },
 ];
 
-export async function seedDatabase() {
-  const existing = await db.select().from(challenges);
+export async function seedDatabase(storage: IStorage) {
+  const existing = await storage.getChallenges();
   if (existing.length > 0) {
     return;
   }
 
   console.log("Seeding database with challenges...");
   for (const challenge of seedChallenges) {
-    await db.insert(challenges).values(challenge);
+    await storage.createChallenge({
+      ...challenge,
+      testCases: JSON.parse(challenge.testCases),
+    });
   }
   console.log(`Seeded ${seedChallenges.length} challenges`);
 }

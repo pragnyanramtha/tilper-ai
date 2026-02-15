@@ -789,7 +789,10 @@ Return JSON: {"qualityScore": number, "feedback": "2-3 sentence feedback for a t
 
         for (const block of response.content) {
           if (block.type === "text" && block.text) {
-            const chunks = block.text.match(/.{1,20}/g) || [block.text];
+            const chunks = block.text.split(/(?<=\n)/g).flatMap(line => {
+              if (line.length <= 200) return [line];
+              return line.match(/.{1,200}/g) || [line];
+            });
             for (const chunk of chunks) {
               res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
             }
@@ -876,13 +879,21 @@ Return JSON: {"qualityScore": number, "feedback": "2-3 sentence feedback for a t
         messages: [
           {
             role: "user",
-            content: `Generate a detailed visual animation sequence to explain this programming concept. Return a JSON array of 6-10 animation steps.
+            content: `Generate a visual step-by-step walkthrough showing how to solve this specific coding challenge. Focus on the ALGORITHM and APPROACH, not just data structure definitions.
 
 Topic: ${topic}
 Title: ${title}
 Description: ${description}
 
-Each step should be an object with:
+Create 6-8 animation steps that walk through:
+1. Understanding the problem (what input/output looks like)
+2. The key insight or approach
+3. Step-by-step algorithm walkthrough with a small example
+4. The final solution idea
+
+Use the student's preferred language for any code examples (based on the challenge language, NOT C++).
+
+Return a JSON array of animation steps. Each step should be an object with:
 - type: "text" | "code" | "diagram" | "highlight" | "comparison" | "steps"
 - content: the text/code/diagram-keyword to display
 - duration: number of seconds (2-5)
@@ -890,23 +901,11 @@ Each step should be an object with:
 - fontSize: optional font size for text type (14-24)
 - subtitle: optional secondary text to show below main content
 
-For diagram type, use rich keywords:
-- "array" - array visualization with indices
-- "linked-list" - linked list with nodes and pointers
-- "stack" - stack data structure (push/pop)
-- "queue" - queue data structure (enqueue/dequeue)
-- "tree" - binary tree structure
-- "sorting" - sorting algorithm visualization
-- "loop" - loop/iteration visualization
-- "recursion" - recursive call stack
-- "flow" - general flowchart
-- "hashmap" - hash map with key-value pairs
-- "graph" - graph with nodes and edges
-
+For diagram type, use keywords: "array", "linked-list", "stack", "queue", "tree", "sorting", "loop", "recursion", "flow", "hashmap", "graph"
 For "comparison" type, content should be "left_label|right_label|left_code|right_code"
 For "steps" type, content should be step descriptions separated by "|"
 
-Create an engaging, educational sequence that builds understanding progressively.
+Focus on showing the logic flow and problem-solving process for THIS specific challenge, using examples from the description.
 Return ONLY a valid JSON array, no markdown wrapping.`,
           },
         ],

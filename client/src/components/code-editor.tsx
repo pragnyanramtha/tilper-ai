@@ -1,12 +1,24 @@
+import { useEffect, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { javascript } from "@codemirror/lang-javascript";
 import { python } from "@codemirror/lang-python";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { useTheme } from "./theme-provider";
-import { Play, RotateCcw, Check, Loader2, Send } from "lucide-react";
+import { Play, RotateCcw, Check, Loader2, Send, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useState } from "react";
+import { Card } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+
+interface EvaluationResult {
+  score: number;
+  testScore: number;
+  qualityScore: number;
+  feedback: string;
+  strengths: string[];
+  improvements: string[];
+  allPassed: boolean;
+}
 
 interface CodeEditorProps {
   code: string;
@@ -20,6 +32,7 @@ interface CodeEditorProps {
   output?: string;
   testResults?: Array<{ passed: boolean; name: string; message?: string }>;
   pyodideReady?: boolean;
+  evaluation?: EvaluationResult | null;
 }
 
 export function CodeEditor({
@@ -34,9 +47,16 @@ export function CodeEditor({
   output = "",
   testResults,
   pyodideReady = true,
+  evaluation = null,
 }: CodeEditorProps) {
   const { theme } = useTheme();
   const [showOutput, setShowOutput] = useState(false);
+
+  useEffect(() => {
+    if (testResults && testResults.length > 0) {
+      setShowOutput(true);
+    }
+  }, [testResults]);
 
   const extensions = language === "python" ? [python()] : [javascript({ jsx: true })];
 
@@ -172,6 +192,55 @@ export function CodeEditor({
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {evaluation && (
+        <div className="border-t">
+          <Card className="m-3 p-4" data-testid="card-evaluation">
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles className="w-4 h-4 text-primary" />
+              <h3 className="text-sm font-semibold">Submission Score</h3>
+            </div>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="text-3xl font-bold text-primary" data-testid="text-score">
+                {evaluation.score}
+              </div>
+              <div className="text-sm text-muted-foreground">/100</div>
+            </div>
+            <Progress value={evaluation.score} className="h-2 mb-3" />
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <div className="text-xs">
+                <span className="text-muted-foreground">Tests: </span>
+                <span className="font-medium">{evaluation.testScore}/70</span>
+              </div>
+              <div className="text-xs">
+                <span className="text-muted-foreground">Quality: </span>
+                <span className="font-medium">{evaluation.qualityScore}/30</span>
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground mb-2">{evaluation.feedback}</p>
+            {evaluation.strengths.length > 0 && (
+              <div className="mb-2">
+                <p className="text-xs font-medium text-green-500 mb-1">Strengths:</p>
+                <ul className="text-xs text-muted-foreground space-y-0.5">
+                  {evaluation.strengths.map((s, i) => (
+                    <li key={i}>+ {s}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {evaluation.improvements.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-yellow-500 mb-1">To improve:</p>
+                <ul className="text-xs text-muted-foreground space-y-0.5">
+                  {evaluation.improvements.map((s, i) => (
+                    <li key={i}>- {s}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </Card>
         </div>
       )}
     </div>

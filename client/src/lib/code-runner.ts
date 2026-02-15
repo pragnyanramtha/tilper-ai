@@ -140,14 +140,19 @@ sys.stderr = sys.__stderr__
     for (const test of testCases) {
       try {
         const fnName = test.functionName || "solution";
-        const args = (test.input || []).map(a => JSON.stringify(a)).join(", ");
+        const args = (test.input || []).map(a => {
+          if (typeof a === "boolean") return a ? "True" : "False";
+          if (a === null) return "None";
+          return JSON.stringify(a);
+        }).join(", ");
         const resultPy = pyodide.runPython(`
-import json
+import json as _json
 try:
-    _result = ${fnName}(${args})
-    json.dumps(_result)
-except Exception as e:
-    json.dumps({"__error__": str(e)})
+    _test_result = ${fnName}(${args})
+    _test_json = _json.dumps(_test_result)
+except Exception as _e:
+    _test_json = _json.dumps({"__error__": str(_e)})
+_test_json
 `);
         const result = JSON.parse(resultPy);
 

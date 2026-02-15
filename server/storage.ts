@@ -15,7 +15,7 @@ import {
   type LearningPlan,
   type InsertLearningPlan,
 } from "@shared/schema";
-import { eq, and, asc, desc } from "drizzle-orm";
+import { eq, and, asc, desc, or, isNull } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -112,7 +112,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getChallengesBySession(sessionId: string): Promise<Challenge[]> {
-    return db.select().from(challenges).where(eq(challenges.sessionId, sessionId)).orderBy(desc(challenges.createdAt));
+    return db
+      .select()
+      .from(challenges)
+      .where(or(eq(challenges.sessionId, sessionId), isNull(challenges.sessionId)))
+      .orderBy(desc(challenges.createdAt));
   }
 
   async getChallenge(id: number): Promise<Challenge | undefined> {
@@ -168,4 +172,170 @@ export class DatabaseStorage implements IStorage {
   }
 }
 
-export const storage = new DatabaseStorage();
+export class MemStorage implements IStorage {
+  private users: Map<string, User>;
+  private userProfiles: Map<number, UserProfile>;
+  private learningPlans: Map<number, LearningPlan>;
+  private challenges: Map<number, Challenge>;
+  private userProgress: Map<number, UserProgress>;
+  private currentIds: { [key: string]: number };
+
+  constructor() {
+    this.users = new Map();
+    this.userProfiles = new Map();
+    this.learningPlans = new Map();
+    this.challenges = new Map();
+    this.userProgress = new Map();
+    this.currentIds = { userProfiles: 1, learningPlans: 1, challenges: 1, userProgress: 1 };
+  }
+
+  async getUser(id: string): Promise<User | undefined> {
+    return this.users.get(id);
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find((u) => u.username === username);
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const id = Math.random().toString(36).substring(2, 11);
+    const user: User = { ...insertUser, id };
+    this.users.set(id, user);
+    return user;
+  }
+
+  async getProfile(sessionId: string): Promise<UserProfile | undefined> {
+    return Array.from(this.userProfiles.values()).find((p) => p.sessionId === sessionId);
+  }
+
+  async upsertProfile(sessionId: string, data: Partial<InsertUserProfile>): Promise<UserProfile> {
+    const existing = await this.getProfile(sessionId);
+    if (existing) {
+      const updated = {
+        ...existing,
+        ...data,
+        updatedAt: new Date(),
+      };
+      this.userProfiles.set(existing.id, updated);
+      return updated;
+    }
+    const id = this.currentIds.userProfiles++;
+    const created: UserProfile = {
+      id,
+      sessionId,
+      name: data.name ?? null,
+      age: data.age ?? null,
+      experience: data.experience ?? null,
+      goals: data.goals ?? null,
+      preferredLanguage: data.preferredLanguage ?? "javascript",
+      memories: data.memories ?? [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.userProfiles.set(id, created);
+    return created;
+  }
+
+  async getLearningPlans(sessionId: string): Promise<LearningPlan[]> {
+    return Array.from(this.learningPlans.values())
+      .filter((p) => p.sessionId === sessionId)
+      .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
+  }
+
+  async getLearningPlan(id: number): Promise<LearningPlan | undefined> {
+    return this.learningPlans.get(id);
+  }
+
+  async createLearningPlan(plan: InsertLearningPlan): Promise<LearningPlan> {
+    const id = this.currentIds.learningPlans++;
+    const created: LearningPlan = {
+      id,
+      ...plan,
+      description: plan.description ?? null,
+      topics: plan.topics ?? [],
+      status: plan.status ?? "active",
+      createdAt: new Date(),
+    };
+    this.learningPlans.set(id, created);
+    return created;
+  }
+
+  async updateLearningPlan(id: number, data: Partial<InsertLearningPlan>): Promise<LearningPlan> {
+    const existing = this.learningPlans.get(id);
+    if (!existing) throw new Error("Plan not found");
+    const updated = { ...existing, ...data };
+    this.learningPlans.set(id, updated);
+    return updated;
+  }
+
+  async getChallenges(): Promise<Challenge[]> {
+    return Array.from(this.challenges.values()).sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
+  }
+
+  async getChallengesBySession(sessionId: string): Promise<Challenge[]> {
+    return Array.from(this.challenges.values())
+      .filter((c) => c.sessionId === sessionId || c.sessionId === null)
+      .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
+  }
+
+  async getChallenge(id: number): Promise<Challenge | undefined> {
+    return this.challenges.get(id);
+  }
+
+  async createChallenge(challenge: InsertChallenge): Promise<Challenge> {
+    const id = this.currentIds.challenges++;
+    const created: Challenge = {
+      id,
+      ...challenge,
+      language: challenge.language ?? "javascript",
+      order: challenge.order ?? 0,
+      generatedBy: challenge.generatedBy ?? "seed",
+      sessionId: challenge.sessionId ?? null,
+      planId: challenge.planId ?? null,
+      createdAt: new Date(),
+    };
+    this.challenges.set(id, created);
+    return created;
+  }
+
+  async getProgress(sessionId: string): Promise<UserProgress[]> {
+    return Array.from(this.userProgress.values()).filter((p) => p.sessionId === sessionId);
+  }
+
+  async getProgressForChallenge(sessionId: string, challengeId: number): Promise<UserProgress | undefined> {
+    return Array.from(this.userProgress.values()).find(
+      (p) => p.sessionId === sessionId && p.challengeId === challengeId,
+    );
+  }
+
+  async upsertProgress(sessionId: string, challengeId: number, status: string, userCode?: string, score?: number, aiFeedback?: string): Promise<UserProgress> {
+    const existing = await this.getProgressForChallenge(sessionId, challengeId);
+    if (existing) {
+      const updated = {
+        ...existing,
+        status,
+        userCode: userCode ?? existing.userCode,
+        score: score ?? existing.score,
+        aiFeedback: aiFeedback ?? existing.aiFeedback,
+        completedAt: status === "completed" ? new Date() : existing.completedAt,
+      };
+      this.userProgress.set(existing.id, updated);
+      return updated;
+    }
+    const id = this.currentIds.userProgress++;
+    const created: UserProgress = {
+      id,
+      sessionId,
+      challengeId,
+      status,
+      userCode: userCode ?? null,
+      score: score ?? null,
+      aiFeedback: aiFeedback ?? null,
+      completedAt: status === "completed" ? new Date() : null,
+    };
+    this.userProgress.set(id, created);
+    return created;
+  }
+}
+
+export const storage = process.env.DATABASE_URL ? new DatabaseStorage() : new MemStorage();

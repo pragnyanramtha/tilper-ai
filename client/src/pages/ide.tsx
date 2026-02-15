@@ -9,9 +9,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Progress } from "@/components/ui/progress";
 import {
   BookOpen,
   Play,
@@ -241,52 +239,6 @@ export default function IDEPage() {
       <TabsContent value="lesson" className="flex-1 mt-0 overflow-auto">
         <div className="p-4">
           <ChallengeDetail challenge={challenge} />
-          {evaluation && (
-            <Card className="p-4 mt-4" data-testid="card-evaluation">
-              <div className="flex items-center gap-2 mb-3">
-                <Sparkles className="w-4 h-4 text-primary" />
-                <h3 className="text-sm font-semibold">Submission Score</h3>
-              </div>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="text-3xl font-bold text-primary" data-testid="text-score">
-                  {evaluation.score}
-                </div>
-                <div className="text-sm text-muted-foreground">/100</div>
-              </div>
-              <Progress value={evaluation.score} className="h-2 mb-3" />
-              <div className="grid grid-cols-2 gap-2 mb-3">
-                <div className="text-xs">
-                  <span className="text-muted-foreground">Tests: </span>
-                  <span className="font-medium">{evaluation.testScore}/70</span>
-                </div>
-                <div className="text-xs">
-                  <span className="text-muted-foreground">Quality: </span>
-                  <span className="font-medium">{evaluation.qualityScore}/30</span>
-                </div>
-              </div>
-              <p className="text-sm text-muted-foreground mb-2">{evaluation.feedback}</p>
-              {evaluation.strengths.length > 0 && (
-                <div className="mb-2">
-                  <p className="text-xs font-medium text-green-500 mb-1">Strengths:</p>
-                  <ul className="text-xs text-muted-foreground space-y-0.5">
-                    {evaluation.strengths.map((s, i) => (
-                      <li key={i}>+ {s}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {evaluation.improvements.length > 0 && (
-                <div>
-                  <p className="text-xs font-medium text-yellow-500 mb-1">To improve:</p>
-                  <ul className="text-xs text-muted-foreground space-y-0.5">
-                    {evaluation.improvements.map((s, i) => (
-                      <li key={i}>- {s}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </Card>
-          )}
         </div>
       </TabsContent>
       <TabsContent value="visual" className="flex-1 mt-0 min-h-0">
@@ -305,6 +257,7 @@ export default function IDEPage() {
             description: challenge.description,
             language: challenge.language,
           }}
+          currentCode={code}
           compact
         />
       </TabsContent>
@@ -324,6 +277,7 @@ export default function IDEPage() {
       output={output}
       testResults={testResults}
       pyodideReady={challenge.language === "python" ? pyodideReady : true}
+      evaluation={evaluation}
     />
   );
 

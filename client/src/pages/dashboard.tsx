@@ -49,6 +49,7 @@ export default function Dashboard() {
   } = useAppContext();
 
   const [isStreaming, setIsStreaming] = useState(false);
+  const [thinkingMessage, setThinkingMessage] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const { data: profile } = useQuery<UserProfile>({
@@ -169,7 +170,11 @@ When they want to practice a specific topic, suggest generating a challenge for 
           if (line.startsWith("data: ")) {
             try {
               const data = JSON.parse(line.slice(6));
+              if (data.thinking) {
+                setThinkingMessage(data.thinking);
+              }
               if (data.content) {
+                setThinkingMessage(null);
                 assistantContent += data.content;
                 setChatMessages((prev) => {
                   const updated = [...prev];
@@ -204,6 +209,7 @@ When they want to practice a specific topic, suggest generating a challenge for 
       ]);
     } finally {
       setIsStreaming(false);
+      setThinkingMessage(null);
     }
   };
 
@@ -306,7 +312,7 @@ When they want to practice a specific topic, suggest generating a challenge for 
                   }`}
                 >
                   {msg.role === "assistant" ? (
-                    <div className="prose prose-sm dark:prose-invert max-w-none [&_pre]:bg-background/50 [&_pre]:p-2 [&_pre]:rounded-md [&_pre]:text-xs [&_code]:text-xs [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1">
+                    <div className="prose prose-sm dark:prose-invert max-w-none [&_pre]:bg-background/50 [&_pre]:p-2 [&_pre]:rounded-md [&_pre]:text-xs [&_code]:text-xs [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1 [&_li]:text-sm [&_blockquote]:border-l-2 [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {msg.content || "\u200B"}
                       </ReactMarkdown>
@@ -325,10 +331,10 @@ When they want to practice a specific topic, suggest generating a challenge for 
               </div>
             ))}
 
-            {isStreaming && chatMessages[chatMessages.length - 1]?.content === "" && (
+            {isStreaming && (chatMessages[chatMessages.length - 1]?.content === "" || thinkingMessage) && (
               <div className="flex items-center gap-2 text-muted-foreground text-xs pl-10">
                 <Loader2 className="w-3 h-3 animate-spin" />
-                Thinking...
+                {thinkingMessage || "Thinking..."}
               </div>
             )}
           </div>
