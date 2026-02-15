@@ -1,7 +1,6 @@
-import { createContext, useContext, useState, useCallback } from "react";
-import type { UserProfile, LearningPlan } from "@shared/schema";
+import { createContext, useContext, useState } from "react";
 
-type AppMode = "plan" | "build";
+type AppMode = "plan" | "learn";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -17,6 +16,8 @@ interface AppContextValue {
   setActivePlanId: (id: number | null) => void;
   activeChallengeId: number | null;
   setActiveChallengeId: (id: number | null) => void;
+  isInChat: boolean;
+  setIsInChat: (v: boolean) => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -26,6 +27,7 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [activePlanId, setActivePlanId] = useState<number | null>(null);
   const [activeChallengeId, setActiveChallengeId] = useState<number | null>(null);
+  const [isInChat, setIsInChat] = useState(false);
 
   return (
     <AppContext.Provider
@@ -38,6 +40,8 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
         setActivePlanId,
         activeChallengeId,
         setActiveChallengeId,
+        isInChat,
+        setIsInChat,
       }}
     >
       {children}

@@ -1,7 +1,7 @@
 # Tilper AI - Interactive Coding Platform
 
 ## Overview
-An educational technology platform for teenage developers to learn coding through interactive problem-solving with an AI mentor powered by Claude Sonnet API. Features Plan/Build modes, persistent AI chat, personalized profiles, dynamic AI-generated challenges, browser-based code execution (JS + Python via Pyodide), animated concept visualizations, and progress tracking.
+An educational technology platform for teenage developers to learn coding through interactive problem-solving with an AI mentor powered by Claude Sonnet API. Features a Claude.ai-style chat-first interface with centered greeting + input + action pills, Plan/Learn modes, personalized profiles, dynamic AI-generated challenges, browser-based code execution (JS + Python via Pyodide), animated concept visualizations, and progress tracking.
 
 ## Architecture
 - **Frontend**: React + Vite, TailwindCSS, Shadcn UI, CodeMirror editor, wouter routing
@@ -10,17 +10,18 @@ An educational technology platform for teenage developers to learn coding throug
 - **Code Execution**: Client-side (JavaScript via Function constructor, Python via Pyodide WebAssembly)
 
 ## Key Pages
-- `/` - Dashboard with Plan/Build mode views
-  - **Plan mode**: Chat-first view where AI learns about user, generates learning plans
-  - **Build mode**: Shows learning plan topics, quick challenge generator, recent challenges
+- `/` - Chat-first dashboard (Claude.ai style)
+  - **Landing**: Centered greeting ("Afternoon, {name}"), chat input, action pills (Plan, Learn, Code, Explain, Review)
+  - **Chat view**: Full-width chat messages in main area, input at bottom
+  - **Plan mode**: AI learns about user, can generate learning plans from conversation
+  - **Learn mode**: AI helps with coding concepts, challenges, debugging
 - `/ide?challenge=<id>` - IDE page with split-pane layout (lesson/visual tabs on left, code editor on right)
-- `/profile` - Profile/settings page with name, age, experience, goals, preferred language, AI memories
+- `/settings` - Full settings page with profile, AI memories, learning plans overview
 
 ## Layout
-- Sidebar (left): Navigation, learning plans, recent challenges, theme toggle
-- Main content (center): Route-based content
-- Chat panel (right, persistent): AI mentor chat that adapts to Plan/Build mode
-- Plan/Build mode toggle in header
+- Sidebar (left): Tilper AI logo, "New chat" button, Learning Plans, Recent challenges, Settings + theme toggle at bottom
+- Main content (center): Chat-first interface (greeting + input + pills when empty, chat messages when active)
+- No persistent right panel - chat IS the main content
 
 ## API Routes
 - `GET /api/profile` - Get user profile
@@ -60,9 +61,10 @@ An educational technology platform for teenage developers to learn coding throug
 - No authentication required for MVP
 
 ## App Context (client/src/lib/app-context.tsx)
-- Manages: mode (plan/build), chatMessages, activePlanId, activeChallengeId
+- Manages: mode (plan/learn), chatMessages, activePlanId, activeChallengeId, isInChat
 - Wraps entire app for cross-component state sharing
 
 ## Recent Changes
+- Feb 15, 2026: Redesigned to Claude.ai-style chat-first interface, renamed Build to Learn, removed right chat panel, added action pills, full settings page
 - Feb 15, 2026: Added Plan/Build modes, persistent AI chat panel, user profiles with memories, learning plans, profile page
 - Feb 15, 2026: Initial MVP build - dynamic AI challenge generation, Pyodide Python support, client-side code execution, AI scoring

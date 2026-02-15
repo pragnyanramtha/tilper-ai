@@ -48,7 +48,7 @@ export default function IDEPage() {
 
   useEffect(() => {
     setActiveChallengeId(challengeId);
-    setMode("build");
+    setMode("learn");
   }, [challengeId]);
 
   const [code, setCode] = useState("");
