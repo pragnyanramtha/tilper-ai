@@ -1,7 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { seedDatabase } from "./seed";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 
@@ -21,11 +20,11 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  await seedDatabase();
 
-  app.get("/api/challenges", async (_req, res) => {
+  app.get("/api/challenges", async (req, res) => {
     try {
-      const allChallenges = await storage.getChallenges();
+      const sessionId = getSessionId(req);
+      const allChallenges = await storage.getChallengesBySession(sessionId);
       res.json(allChallenges);
     } catch (error) {
       console.error("Error fetching challenges:", error);
@@ -73,9 +72,208 @@ export async function registerRoutes(
     }
   });
 
-  const codeSchema = z.object({
+  const generateSchema = z.object({
+    topic: z.string().min(1).max(200),
+    difficulty: z.enum(["Beginner", "Intermediate", "Advanced"]),
+    language: z.enum(["javascript", "python"]),
+  });
+
+  app.post("/api/challenges/generate", async (req, res) => {
+    try {
+      const parsed = generateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request body" });
+      }
+      const { topic, difficulty, language } = parsed.data;
+      const sessionId = getSessionId(req);
+
+      const langName = language === "python" ? "Python" : "JavaScript";
+
+      const response = await anthropic.messages.create({
+        model: "claude-sonnet-4-5",
+        max_tokens: 4096,
+        messages: [
+          {
+            role: "user",
+            content: `Generate a coding challenge for a teenage developer learning ${langName}.
+
+Topic: ${topic}
+Difficulty: ${difficulty}
+Language: ${langName}
+
+Return ONLY valid JSON (no markdown, no backticks) with this exact structure:
+{
+  "title": "Short challenge title",
+  "description": "2-3 sentence description of what to build/solve",
+  "starterCode": "The starter code with function stub and example usage",
+  "solution": "The complete working solution",
+  "hints": ["hint1", "hint2", "hint3"],
+  "testCases": [
+    {"name": "Test description", "input": [arg1, arg2], "expected": expectedResult, "functionName": "theFunctionName"},
+    {"name": "Another test", "input": [arg1], "expected": expectedResult, "functionName": "theFunctionName"}
+  ]
+}
+
+Rules:
+- The starterCode must define exactly ONE function with a clear name
+- Include 3-5 test cases with diverse inputs (edge cases, negatives, empty, etc.)
+- Every test case MUST include "functionName" with the exact function name used in starterCode
+- Test inputs should be arrays of arguments (use [] for no-arg functions)
+- Expected values must be concrete (not descriptions)
+- Hints should be progressive (easy to specific)
+- Make it educational and engaging for teens
+- For ${langName} use proper syntax`,
+          },
+        ],
+      });
+
+      const text = response.content[0].type === "text" ? response.content[0].text : "";
+      let challengeData;
+      try {
+        const cleaned = text.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
+        challengeData = JSON.parse(cleaned);
+      } catch {
+        return res.status(500).json({ error: "Failed to parse AI response" });
+      }
+
+      const challenge = await storage.createChallenge({
+        title: challengeData.title,
+        description: challengeData.description,
+        difficulty,
+        topic,
+        language,
+        starterCode: challengeData.starterCode,
+        solution: challengeData.solution,
+        hints: challengeData.hints || [],
+        testCases: challengeData.testCases || [],
+        order: 0,
+        generatedBy: "ai",
+        sessionId,
+      });
+
+      res.json(challenge);
+    } catch (error) {
+      console.error("Error generating challenge:", error);
+      res.status(500).json({ error: "Failed to generate challenge" });
+    }
+  });
+
+  const saveProgressSchema = z.object({
+    challengeId: z.number().int().positive(),
+    code: z.string().max(50000),
+    status: z.string(),
+  });
+
+  app.post("/api/progress/save", async (req, res) => {
+    try {
+      const parsed = saveProgressSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request body" });
+      }
+      const { challengeId, code, status } = parsed.data;
+      const sessionId = getSessionId(req);
+      const progress = await storage.upsertProgress(sessionId, challengeId, status, code);
+      res.json(progress);
+    } catch (error) {
+      console.error("Error saving progress:", error);
+      res.status(500).json({ error: "Failed to save progress" });
+    }
+  });
+
+  const evaluateSchema = z.object({
     code: z.string().min(1).max(50000),
     challengeId: z.number().int().positive(),
+    testResults: z.array(z.object({
+      name: z.string(),
+      passed: z.boolean(),
+      message: z.string().optional(),
+    })),
+    language: z.string(),
+  });
+
+  app.post("/api/submissions/evaluate", async (req, res) => {
+    try {
+      const parsed = evaluateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request body" });
+      }
+      const { code, challengeId, testResults, language } = parsed.data;
+      const sessionId = getSessionId(req);
+
+      const challenge = await storage.getChallenge(challengeId);
+      if (!challenge) {
+        return res.status(404).json({ error: "Challenge not found" });
+      }
+
+      const passedCount = testResults.filter(t => t.passed).length;
+      const totalCount = testResults.length;
+      const testScore = totalCount > 0 ? Math.round((passedCount / totalCount) * 70) : 0;
+
+      const response = await anthropic.messages.create({
+        model: "claude-haiku-4-5",
+        max_tokens: 1024,
+        messages: [
+          {
+            role: "user",
+            content: `Evaluate this ${language} code submission for a coding challenge. Return ONLY valid JSON (no markdown).
+
+Challenge: ${challenge.title}
+Description: ${challenge.description}
+Expected solution approach: ${challenge.solution}
+
+Student's code:
+\`\`\`
+${code}
+\`\`\`
+
+Test results: ${passedCount}/${totalCount} passed
+
+Rate code quality (0-30 points) based on:
+- Readability and naming (0-10)
+- Efficiency (0-10)
+- Best practices (0-10)
+
+Return JSON: {"qualityScore": number, "feedback": "2-3 sentence feedback for a teen learner", "strengths": ["strength1"], "improvements": ["improvement1"]}`,
+          },
+        ],
+      });
+
+      const text = response.content[0].type === "text" ? response.content[0].text : "";
+      let evaluation;
+      try {
+        const cleaned = text.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
+        evaluation = JSON.parse(cleaned);
+      } catch {
+        evaluation = { qualityScore: 15, feedback: "Good attempt! Keep practicing.", strengths: ["Submitted a solution"], improvements: ["Review the failing tests"] };
+      }
+
+      const totalScore = Math.min(100, testScore + (evaluation.qualityScore || 0));
+      const allPassed = passedCount === totalCount;
+
+      const feedbackText = `Score: ${totalScore}/100\n${evaluation.feedback}\nStrengths: ${(evaluation.strengths || []).join(", ")}\nTo improve: ${(evaluation.improvements || []).join(", ")}`;
+
+      await storage.upsertProgress(
+        sessionId,
+        challengeId,
+        allPassed ? "completed" : "in_progress",
+        code,
+        totalScore,
+        feedbackText
+      );
+
+      res.json({
+        score: totalScore,
+        testScore,
+        qualityScore: evaluation.qualityScore || 0,
+        feedback: evaluation.feedback,
+        strengths: evaluation.strengths || [],
+        improvements: evaluation.improvements || [],
+        allPassed,
+      });
+    } catch (error) {
+      console.error("Error evaluating submission:", error);
+      res.status(500).json({ error: "Failed to evaluate submission" });
+    }
   });
 
   const chatSchema = z.object({
@@ -84,67 +282,6 @@ export async function registerRoutes(
       content: z.string().min(1).max(10000),
     })),
     systemPrompt: z.string().max(20000),
-  });
-
-  const animationSchema = z.object({
-    topic: z.string().min(1).max(200),
-    title: z.string().min(1).max(500),
-    description: z.string().min(1).max(2000),
-  });
-
-  app.post("/api/code/run", async (req, res) => {
-    try {
-      const parsed = codeSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid request body" });
-      }
-      const { code, challengeId } = parsed.data;
-      const sessionId = getSessionId(req);
-
-      const challenge = await storage.getChallenge(challengeId);
-      if (!challenge) {
-        return res.status(404).json({ error: "Challenge not found" });
-      }
-
-      await storage.upsertProgress(sessionId, challengeId, "in_progress", code);
-
-      const result = executeCode(code, challenge);
-      res.json(result);
-    } catch (error) {
-      console.error("Error running code:", error);
-      res.status(500).json({ error: "Failed to run code" });
-    }
-  });
-
-  app.post("/api/code/submit", async (req, res) => {
-    try {
-      const parsed = codeSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid request body" });
-      }
-      const { code, challengeId } = parsed.data;
-      const sessionId = getSessionId(req);
-
-      const challenge = await storage.getChallenge(challengeId);
-      if (!challenge) {
-        return res.status(404).json({ error: "Challenge not found" });
-      }
-
-      const result = executeCode(code, challenge);
-      const allPassed = result.testResults.every((t: any) => t.passed);
-
-      await storage.upsertProgress(
-        sessionId,
-        challengeId,
-        allPassed ? "completed" : "in_progress",
-        code
-      );
-
-      res.json(result);
-    } catch (error) {
-      console.error("Error submitting code:", error);
-      res.status(500).json({ error: "Failed to submit code" });
-    }
   });
 
   app.post("/api/mentor/chat", async (req, res) => {
@@ -186,6 +323,12 @@ export async function registerRoutes(
         res.status(500).json({ error: "Failed to get AI response" });
       }
     }
+  });
+
+  const animationSchema = z.object({
+    topic: z.string().min(1).max(200),
+    title: z.string().min(1).max(500),
+    description: z.string().min(1).max(2000),
   });
 
   app.post("/api/animations/generate", async (req, res) => {
@@ -244,76 +387,4 @@ Return ONLY a valid JSON array of 4-6 steps, no markdown wrapping.`,
   });
 
   return httpServer;
-}
-
-function executeCode(code: string, challenge: any): { output: string; testResults: any[] } {
-  const testCases = typeof challenge.testCases === "string"
-    ? JSON.parse(challenge.testCases)
-    : challenge.testCases;
-
-  const testResults: any[] = [];
-  let output = "";
-
-  const logs: string[] = [];
-  const mockConsole = {
-    log: (...args: any[]) => logs.push(args.map(String).join(" ")),
-  };
-
-  try {
-    const fn = new Function("console", code + "\n; return typeof helloWorld !== 'undefined' ? helloWorld : typeof add !== 'undefined' ? add : typeof isEven !== 'undefined' ? isEven : typeof reverseString !== 'undefined' ? reverseString : typeof findMax !== 'undefined' ? findMax : typeof countVowels !== 'undefined' ? countVowels : typeof fizzBuzz !== 'undefined' ? fizzBuzz : typeof isPalindrome !== 'undefined' ? isPalindrome : undefined;");
-
-    const userFn = fn(mockConsole);
-    output = logs.join("\n");
-
-    if (userFn && typeof userFn === "function") {
-      for (const test of testCases) {
-        try {
-          const result = userFn(...(test.input || []));
-
-          if (test.expected === "includes_FizzBuzz") {
-            const passed = Array.isArray(result) && result.includes("FizzBuzz");
-            testResults.push({
-              passed,
-              name: test.name,
-              message: passed ? "Correct" : `Expected array to include "FizzBuzz"`,
-            });
-          } else {
-            const passed = JSON.stringify(result) === JSON.stringify(test.expected);
-            testResults.push({
-              passed,
-              name: test.name,
-              message: passed
-                ? "Correct"
-                : `Expected ${JSON.stringify(test.expected)}, got ${JSON.stringify(result)}`,
-            });
-          }
-        } catch (testError: any) {
-          testResults.push({
-            passed: false,
-            name: test.name,
-            message: `Error: ${testError.message}`,
-          });
-        }
-      }
-    } else {
-      for (const test of testCases) {
-        testResults.push({
-          passed: false,
-          name: test.name,
-          message: "Function not found. Make sure to define the function with the correct name.",
-        });
-      }
-    }
-  } catch (error: any) {
-    output = `Error: ${error.message}`;
-    for (const test of testCases) {
-      testResults.push({
-        passed: false,
-        name: test.name,
-        message: `Syntax Error: ${error.message}`,
-      });
-    }
-  }
-
-  return { output, testResults };
 }

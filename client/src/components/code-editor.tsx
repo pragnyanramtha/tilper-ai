@@ -3,7 +3,7 @@ import { javascript } from "@codemirror/lang-javascript";
 import { python } from "@codemirror/lang-python";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { useTheme } from "./theme-provider";
-import { Play, RotateCcw, Check, Loader2 } from "lucide-react";
+import { Play, RotateCcw, Check, Loader2, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
@@ -16,8 +16,10 @@ interface CodeEditorProps {
   onReset?: () => void;
   onSubmit?: () => void;
   isRunning?: boolean;
+  isEvaluating?: boolean;
   output?: string;
   testResults?: Array<{ passed: boolean; name: string; message?: string }>;
+  pyodideReady?: boolean;
 }
 
 export function CodeEditor({
@@ -28,8 +30,10 @@ export function CodeEditor({
   onReset,
   onSubmit,
   isRunning = false,
+  isEvaluating = false,
   output = "",
   testResults,
+  pyodideReady = true,
 }: CodeEditorProps) {
   const { theme } = useTheme();
   const [showOutput, setShowOutput] = useState(false);
@@ -45,8 +49,14 @@ export function CodeEditor({
       <div className="flex items-center justify-between gap-2 p-2 border-b bg-card dark:bg-[#141516]">
         <div className="flex items-center gap-2 flex-wrap">
           <Badge variant="secondary" className="font-mono text-xs">
-            {language === "javascript" ? "JS" : "PY"}
+            {language === "python" ? "PY" : "JS"}
           </Badge>
+          {!pyodideReady && language === "python" && (
+            <Badge variant="outline" className="text-xs">
+              <Loader2 className="w-3 h-3 animate-spin mr-1" />
+              Loading Python...
+            </Badge>
+          )}
           {testResults && (
             <Badge variant={allPassed ? "default" : "secondary"} className="text-xs">
               {passedTests}/{totalTests} tests
@@ -69,10 +79,10 @@ export function CodeEditor({
               size="sm"
               variant="secondary"
               onClick={onRun}
-              disabled={isRunning}
+              disabled={isRunning || (!pyodideReady && language === "python")}
               data-testid="button-run-code"
             >
-              {isRunning ? (
+              {isRunning && !isEvaluating ? (
                 <Loader2 className="w-4 h-4 animate-spin mr-1" />
               ) : (
                 <Play className="w-4 h-4 mr-1" />
@@ -84,10 +94,14 @@ export function CodeEditor({
             <Button
               size="sm"
               onClick={onSubmit}
-              disabled={isRunning}
+              disabled={isRunning || (!pyodideReady && language === "python")}
               data-testid="button-submit-code"
             >
-              <Check className="w-4 h-4 mr-1" />
+              {isEvaluating ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-1" />
+              ) : (
+                <Send className="w-4 h-4 mr-1" />
+              )}
               Submit
             </Button>
           )}

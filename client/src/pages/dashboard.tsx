@@ -1,11 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Code2,
   Sparkles,
@@ -16,13 +15,31 @@ import {
   CheckCircle2,
   Circle,
   BookOpen,
-  Target,
-  Sun,
-  Moon,
+  Loader2,
   ArrowRight,
+  Binary,
+  Braces,
+  GitBranch,
+  Layers,
+  FileCode,
 } from "lucide-react";
-import { useTheme } from "@/components/theme-provider";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Challenge, UserProgress } from "@shared/schema";
+
+const TOPICS = [
+  { label: "Variables & Types", icon: Binary, topic: "Variables and Data Types" },
+  { label: "Functions", icon: Braces, topic: "Functions" },
+  { label: "Arrays & Lists", icon: Layers, topic: "Arrays and Lists" },
+  { label: "Loops", icon: GitBranch, topic: "Loops and Iteration" },
+  { label: "Strings", icon: FileCode, topic: "String Manipulation" },
+  { label: "Logic", icon: Code2, topic: "Conditional Logic" },
+];
+
+const DIFFICULTIES = ["Beginner", "Intermediate", "Advanced"] as const;
+const LANGUAGES = [
+  { label: "JavaScript", value: "javascript" as const },
+  { label: "Python", value: "python" as const },
+];
 
 function getDifficultyColor(difficulty: string) {
   switch (difficulty.toLowerCase()) {
@@ -34,19 +51,6 @@ function getDifficultyColor(difficulty: string) {
       return "text-red-400";
     default:
       return "text-muted-foreground";
-  }
-}
-
-function getDifficultyBg(difficulty: string) {
-  switch (difficulty.toLowerCase()) {
-    case "beginner":
-      return "bg-green-500/10";
-    case "intermediate":
-      return "bg-yellow-500/10";
-    case "advanced":
-      return "bg-red-400/10";
-    default:
-      return "bg-muted";
   }
 }
 
@@ -65,7 +69,8 @@ function getDifficultyIcon(difficulty: string) {
 
 export default function Dashboard() {
   const [, navigate] = useLocation();
-  const { theme, toggleTheme } = useTheme();
+  const [selectedDifficulty, setSelectedDifficulty] = useState<string>("Beginner");
+  const [selectedLanguage, setSelectedLanguage] = useState<"javascript" | "python">("javascript");
 
   const { data: challenges, isLoading: challengesLoading } = useQuery<Challenge[]>({
     queryKey: ["/api/challenges"],
@@ -82,234 +87,189 @@ export default function Dashboard() {
     }
   }
 
-  const totalChallenges = challenges?.length || 0;
-  const completedChallenges = Object.values(progressMap).filter(
-    (p) => p.status === "completed"
-  ).length;
-  const progressPercent =
-    totalChallenges > 0 ? (completedChallenges / totalChallenges) * 100 : 0;
-
-  const nextChallenge = challenges?.find(
-    (c) => !progressMap[c.id] || progressMap[c.id].status !== "completed"
-  );
-
-  const groupedByTopic = challenges?.reduce(
-    (acc, c) => {
-      if (!acc[c.topic]) acc[c.topic] = [];
-      acc[c.topic].push(c);
-      return acc;
+  const generateMutation = useMutation({
+    mutationFn: async (params: { topic: string; difficulty: string; language: string }) => {
+      const res = await apiRequest("POST", "/api/challenges/generate", params);
+      return res.json();
     },
-    {} as Record<string, Challenge[]>
-  );
+    onSuccess: (data: Challenge) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/challenges"] });
+      navigate(`/ide?challenge=${data.id}`);
+    },
+  });
+
+  const completedCount = Object.values(progressMap).filter(p => p.status === "completed").length;
+  const totalCount = challenges?.length || 0;
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 18) return "Good afternoon";
+    return "Good evening";
+  };
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-sm dark:bg-[#141516]/90">
-        <div className="max-w-6xl mx-auto flex items-center justify-between gap-4 px-4 py-3">
-          <div className="flex items-center gap-2">
-            <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary/10">
-              <Code2 className="w-5 h-5 text-primary" />
-            </div>
-            <span className="font-bold text-lg">
-              Tilper <span className="text-primary">AI</span>
-            </span>
+    <div className="flex flex-col h-full">
+      <div className="flex-1 flex flex-col items-center justify-start px-4 py-8 max-w-3xl mx-auto w-full">
+        <div className="text-center mb-10 mt-8">
+          <div className="flex items-center justify-center gap-2 mb-3">
+            <Sparkles className="w-6 h-6 text-primary" />
+            <h1 className="text-2xl font-bold" data-testid="text-greeting">
+              {getGreeting()}, ready to code?
+            </h1>
           </div>
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={toggleTheme}
-            data-testid="button-dashboard-theme"
-          >
-            {theme === "dark" ? (
-              <Sun className="w-4 h-4" />
-            ) : (
-              <Moon className="w-4 h-4" />
-            )}
-          </Button>
+          <p className="text-muted-foreground text-sm">
+            Pick a topic and difficulty to generate a new challenge
+          </p>
         </div>
-      </header>
 
-      <main className="max-w-6xl mx-auto px-4 py-8">
-        <section className="mb-10">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6">
-            <div>
-              <h1 className="text-2xl font-bold mb-1">
-                Welcome to Tilper AI
-              </h1>
-              <p className="text-muted-foreground">
-                Learn to code with interactive challenges and an AI mentor by your side
-              </p>
-            </div>
+        <div className="w-full mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Language</span>
+          </div>
+          <div className="flex gap-2 mb-5">
+            {LANGUAGES.map((lang) => (
+              <Button
+                key={lang.value}
+                variant={selectedLanguage === lang.value ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSelectedLanguage(lang.value)}
+                data-testid={`button-lang-${lang.value}`}
+              >
+                {lang.label}
+              </Button>
+            ))}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card className="p-4">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="flex items-center justify-center w-10 h-10 rounded-md bg-primary/10">
-                  <Target className="w-5 h-5 text-primary" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Overall Progress</p>
-                  <p className="text-xl font-bold" data-testid="text-progress-count">
-                    {completedChallenges}/{totalChallenges}
-                  </p>
-                </div>
-              </div>
-              <Progress value={progressPercent} className="h-1.5" data-testid="progress-overall" />
-            </Card>
-
-            <Card className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center w-10 h-10 rounded-md bg-green-500/10">
-                  <CheckCircle2 className="w-5 h-5 text-green-500" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Completed</p>
-                  <p className="text-xl font-bold" data-testid="text-completed-count">
-                    {completedChallenges}
-                  </p>
-                </div>
-              </div>
-            </Card>
-
-            <Card className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center w-10 h-10 rounded-md bg-yellow-500/10">
-                  <Flame className="w-5 h-5 text-yellow-500" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Remaining</p>
-                  <p className="text-xl font-bold" data-testid="text-remaining-count">
-                    {totalChallenges - completedChallenges}
-                  </p>
-                </div>
-              </div>
-            </Card>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Difficulty</span>
           </div>
-        </section>
-
-        {nextChallenge && (
-          <section className="mb-10">
-            <Card className="p-5 border-primary/20 bg-primary/5">
-              <div className="flex items-center justify-between gap-4 flex-wrap">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center justify-center w-10 h-10 rounded-md bg-primary/10">
-                    <Sparkles className="w-5 h-5 text-primary" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground font-medium">
-                      Up Next
-                    </p>
-                    <p className="font-semibold" data-testid="text-next-challenge">
-                      {nextChallenge.title}
-                    </p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <Badge variant="secondary" className="text-xs">
-                        {nextChallenge.topic}
-                      </Badge>
-                      <span className={`text-xs ${getDifficultyColor(nextChallenge.difficulty)}`}>
-                        {nextChallenge.difficulty}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+          <div className="flex gap-2 mb-5">
+            {DIFFICULTIES.map((diff) => {
+              const DiffIcon = getDifficultyIcon(diff);
+              return (
                 <Button
-                  onClick={() => navigate(`/ide?challenge=${nextChallenge.id}`)}
-                  data-testid="button-start-next"
+                  key={diff}
+                  variant={selectedDifficulty === diff ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedDifficulty(diff)}
+                  data-testid={`button-diff-${diff.toLowerCase()}`}
                 >
-                  Start Challenge
-                  <ArrowRight className="w-4 h-4 ml-2" />
+                  <DiffIcon className="w-3.5 h-3.5 mr-1" />
+                  {diff}
                 </Button>
-              </div>
-            </Card>
-          </section>
-        )}
+              );
+            })}
+          </div>
 
-        <section>
-          <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-            <BookOpen className="w-5 h-5 text-primary" />
-            All Challenges
-          </h2>
-
-          {challengesLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Card key={i} className="p-4">
-                  <Skeleton className="h-5 w-3/4 mb-3" />
-                  <Skeleton className="h-4 w-full mb-2" />
-                  <Skeleton className="h-4 w-2/3" />
-                </Card>
-              ))}
-            </div>
-          ) : groupedByTopic ? (
-            <div className="space-y-8">
-              {Object.entries(groupedByTopic).map(([topic, topicChallenges]) => (
-                <div key={topic}>
-                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                    {topic}
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {topicChallenges.map((challenge) => {
-                      const p = progressMap[challenge.id];
-                      const isCompleted = p?.status === "completed";
-                      const DiffIcon = getDifficultyIcon(challenge.difficulty);
-
-                      return (
-                        <Card
-                          key={challenge.id}
-                          className="p-4 hover-elevate cursor-pointer group"
-                          onClick={() =>
-                            navigate(`/ide?challenge=${challenge.id}`)
-                          }
-                          data-testid={`card-challenge-${challenge.id}`}
-                        >
-                          <div className="flex items-start justify-between gap-2 mb-2">
-                            <h4 className="font-semibold text-sm">
-                              {challenge.title}
-                            </h4>
-                            {isCompleted && (
-                              <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
-                            )}
-                          </div>
-                          <p className="text-xs text-muted-foreground line-clamp-2 mb-3">
-                            {challenge.description}
-                          </p>
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-1.5">
-                              <DiffIcon
-                                className={`w-3.5 h-3.5 ${getDifficultyColor(challenge.difficulty)}`}
-                              />
-                              <span
-                                className={`text-xs font-medium ${getDifficultyColor(challenge.difficulty)}`}
-                              >
-                                {challenge.difficulty}
-                              </span>
-                            </div>
-                            <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors" />
-                          </div>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <BookOpen className="w-12 h-12 text-muted-foreground/30 mb-3" />
-              <p className="text-muted-foreground">
-                No challenges available yet
-              </p>
-            </div>
-          )}
-        </section>
-      </main>
-
-      <footer className="border-t mt-16 dark:bg-[#141516]">
-        <div className="max-w-6xl mx-auto px-4 py-6 text-center text-xs text-muted-foreground">
-          Tilper AI - Learn to code with AI-powered mentoring
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Topic</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {TOPICS.map((t) => (
+              <Button
+                key={t.topic}
+                variant="outline"
+                className="justify-start gap-2 h-auto py-3 px-4"
+                onClick={() =>
+                  generateMutation.mutate({
+                    topic: t.topic,
+                    difficulty: selectedDifficulty,
+                    language: selectedLanguage,
+                  })
+                }
+                disabled={generateMutation.isPending}
+                data-testid={`button-topic-${t.label.toLowerCase().replace(/\s+/g, "-")}`}
+              >
+                {generateMutation.isPending &&
+                generateMutation.variables?.topic === t.topic ? (
+                  <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
+                ) : (
+                  <t.icon className="w-4 h-4 flex-shrink-0 text-primary" />
+                )}
+                <span className="text-sm truncate">{t.label}</span>
+              </Button>
+            ))}
+          </div>
         </div>
-      </footer>
+
+        {(challenges && challenges.length > 0) && (
+          <div className="w-full mt-4">
+            <div className="flex items-center justify-between gap-4 mb-3">
+              <h2 className="text-sm font-semibold flex items-center gap-2">
+                <BookOpen className="w-4 h-4 text-primary" />
+                Your Challenges
+                {totalCount > 0 && (
+                  <Badge variant="secondary" className="text-xs">
+                    {completedCount}/{totalCount}
+                  </Badge>
+                )}
+              </h2>
+            </div>
+
+            {challengesLoading ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Card key={i} className="p-3">
+                    <Skeleton className="h-4 w-3/4 mb-2" />
+                    <Skeleton className="h-3 w-full mb-1" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {challenges.map((challenge) => {
+                  const p = progressMap[challenge.id];
+                  const isCompleted = p?.status === "completed";
+                  const DiffIcon = getDifficultyIcon(challenge.difficulty);
+                  const score = p?.score;
+
+                  return (
+                    <Card
+                      key={challenge.id}
+                      className="p-3 hover-elevate cursor-pointer group"
+                      onClick={() => navigate(`/ide?challenge=${challenge.id}`)}
+                      data-testid={`card-challenge-${challenge.id}`}
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-1.5">
+                        <h4 className="font-medium text-sm truncate">{challenge.title}</h4>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {score !== null && score !== undefined && (
+                            <Badge variant="secondary" className="text-xs">
+                              {score}/100
+                            </Badge>
+                          )}
+                          {isCompleted && (
+                            <CheckCircle2 className="w-4 h-4 text-green-500" />
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground line-clamp-1 mb-2">
+                        {challenge.description}
+                      </p>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-xs">
+                            {challenge.language === "python" ? "Python" : "JS"}
+                          </Badge>
+                          <div className="flex items-center gap-1">
+                            <DiffIcon className={`w-3 h-3 ${getDifficultyColor(challenge.difficulty)}`} />
+                            <span className={`text-xs ${getDifficultyColor(challenge.difficulty)}`}>
+                              {challenge.difficulty}
+                            </span>
+                          </div>
+                        </div>
+                        <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/40 group-hover:text-foreground transition-colors" />
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

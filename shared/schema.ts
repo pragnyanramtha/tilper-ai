@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, serial, integer, timestamp, boolean, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, serial, integer, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -25,15 +25,20 @@ export const challenges = pgTable("challenges", {
   description: text("description").notNull(),
   difficulty: text("difficulty").notNull(),
   topic: text("topic").notNull(),
+  language: text("language").notNull().default("javascript"),
   starterCode: text("starter_code").notNull(),
   solution: text("solution").notNull(),
   hints: text("hints").array().notNull(),
   testCases: jsonb("test_cases").notNull(),
   order: integer("order").notNull().default(0),
+  generatedBy: text("generated_by").default("seed"),
+  sessionId: text("session_id"),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const insertChallengeSchema = createInsertSchema(challenges).omit({
   id: true,
+  createdAt: true,
 });
 
 export type Challenge = typeof challenges.$inferSelect;
@@ -45,6 +50,8 @@ export const userProgress = pgTable("user_progress", {
   challengeId: integer("challenge_id").notNull(),
   status: text("status").notNull().default("not_started"),
   userCode: text("user_code"),
+  score: integer("score"),
+  aiFeedback: text("ai_feedback"),
   completedAt: timestamp("completed_at"),
 });
 

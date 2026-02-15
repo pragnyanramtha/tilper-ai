@@ -8,10 +8,8 @@ import {
   type Challenge,
   type InsertChallenge,
   type UserProgress,
-  type InsertUserProgress,
 } from "@shared/schema";
-import { eq, and, asc } from "drizzle-orm";
-import { randomUUID } from "crypto";
+import { eq, and, asc, desc } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -19,12 +17,13 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
 
   getChallenges(): Promise<Challenge[]>;
+  getChallengesBySession(sessionId: string): Promise<Challenge[]>;
   getChallenge(id: number): Promise<Challenge | undefined>;
   createChallenge(challenge: InsertChallenge): Promise<Challenge>;
 
   getProgress(sessionId: string): Promise<UserProgress[]>;
   getProgressForChallenge(sessionId: string, challengeId: number): Promise<UserProgress | undefined>;
-  upsertProgress(sessionId: string, challengeId: number, status: string, userCode?: string): Promise<UserProgress>;
+  upsertProgress(sessionId: string, challengeId: number, status: string, userCode?: string, score?: number, aiFeedback?: string): Promise<UserProgress>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -44,7 +43,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getChallenges(): Promise<Challenge[]> {
-    return db.select().from(challenges).orderBy(asc(challenges.order));
+    return db.select().from(challenges).orderBy(desc(challenges.createdAt));
+  }
+
+  async getChallengesBySession(sessionId: string): Promise<Challenge[]> {
+    return db.select().from(challenges).where(eq(challenges.sessionId, sessionId)).orderBy(desc(challenges.createdAt));
   }
 
   async getChallenge(id: number): Promise<Challenge | undefined> {
@@ -69,7 +72,7 @@ export class DatabaseStorage implements IStorage {
     return progress;
   }
 
-  async upsertProgress(sessionId: string, challengeId: number, status: string, userCode?: string): Promise<UserProgress> {
+  async upsertProgress(sessionId: string, challengeId: number, status: string, userCode?: string, score?: number, aiFeedback?: string): Promise<UserProgress> {
     const existing = await this.getProgressForChallenge(sessionId, challengeId);
     if (existing) {
       const [updated] = await db
@@ -77,6 +80,8 @@ export class DatabaseStorage implements IStorage {
         .set({
           status,
           userCode: userCode ?? existing.userCode,
+          score: score ?? existing.score,
+          aiFeedback: aiFeedback ?? existing.aiFeedback,
           completedAt: status === "completed" ? new Date() : existing.completedAt,
         })
         .where(eq(userProgress.id, existing.id))
@@ -90,6 +95,8 @@ export class DatabaseStorage implements IStorage {
         challengeId,
         status,
         userCode,
+        score,
+        aiFeedback,
       })
       .returning();
     return created;
