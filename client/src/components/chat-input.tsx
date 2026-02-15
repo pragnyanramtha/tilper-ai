@@ -144,13 +144,13 @@ export function ChatInput({
 
   return (
     <div className="w-full" data-testid="chat-input-container">
-      <div className={`relative bg-card border border-border rounded-md ${isLanding ? "" : ""}`}>
+      <div className={`relative glass-panel rounded-xl shadow-xl transition-all duration-300 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary/30 ${isLanding ? "p-1" : ""}`}>
         {attachedFiles.length > 0 && (
           <div className="flex flex-wrap gap-2 px-3 pt-3">
             {attachedFiles.map((file, i) => (
               <div
                 key={i}
-                className="flex items-center gap-1.5 bg-muted rounded-md px-2 py-1.5 text-xs group"
+                className="flex items-center gap-1.5 bg-black/5 dark:bg-white/5 rounded-lg px-2 py-1.5 text-xs group ring-1 ring-inset ring-white/10"
                 data-testid={`attached-file-${i}`}
               >
                 {file.preview ? (
@@ -161,7 +161,7 @@ export function ChatInput({
                 <span className="max-w-[120px] truncate">{file.name}</span>
                 <button
                   onClick={() => removeFile(i)}
-                  className="ml-0.5 text-muted-foreground"
+                  className="ml-0.5 text-muted-foreground hover:text-destructive transition-colors"
                   data-testid={`button-remove-file-${i}`}
                 >
                   <X className="w-3 h-3" />
@@ -177,9 +177,8 @@ export function ChatInput({
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          className={`w-full bg-transparent resize-none text-sm px-4 focus:outline-none ${
-            isLanding ? "pt-3 pb-12 min-h-[80px]" : "pt-3 pb-12 min-h-[48px]"
-          }`}
+          className={`w-full bg-transparent resize-none text-sm px-4 focus:outline-none placeholder:text-muted-foreground/50 ${isLanding ? "pt-4 pb-14 min-h-[100px] text-base" : "pt-3 pb-12 min-h-[48px]"
+            }`}
           rows={isLanding ? 2 : 1}
           disabled={disabled}
           data-testid={isLanding ? "input-main-chat" : "input-chat"}
@@ -201,6 +200,7 @@ export function ChatInput({
               variant="ghost"
               onClick={() => fileInputRef.current?.click()}
               disabled={disabled}
+              className="h-8 w-8 hover:bg-primary/10 hover:text-primary transition-colors rounded-lg"
               data-testid="button-attach-file"
             >
               <Paperclip className="w-4 h-4" />
@@ -210,7 +210,7 @@ export function ChatInput({
               <div className="flex items-center gap-1">
                 <Badge
                   variant={mode === "plan" ? "default" : "outline"}
-                  className={`cursor-pointer text-xs gap-1 ${mode === "plan" ? "" : "no-default-hover-elevate no-default-active-elevate"}`}
+                  className={`cursor-pointer text-xs gap-1 py-1 px-2.5 transition-all duration-300 ${mode === "plan" ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90" : "bg-transparent border-white/20 hover:bg-white/10"}`}
                   onClick={() => toggleMode("plan")}
                   data-testid="badge-mode-plan"
                 >
@@ -219,7 +219,7 @@ export function ChatInput({
                 </Badge>
                 <Badge
                   variant={mode === "learn" ? "default" : "outline"}
-                  className={`cursor-pointer text-xs gap-1 ${mode === "learn" ? "" : "no-default-hover-elevate no-default-active-elevate"}`}
+                  className={`cursor-pointer text-xs gap-1 py-1 px-2.5 transition-all duration-300 ${mode === "learn" ? "bg-cyan-500 text-white shadow-lg shadow-cyan-500/20 hover:bg-cyan-600 border-none" : "bg-transparent border-white/20 hover:bg-white/10"}`}
                   onClick={() => toggleMode("learn")}
                   data-testid="badge-mode-learn"
                 >
@@ -234,6 +234,7 @@ export function ChatInput({
             size="icon"
             onClick={handleSend}
             disabled={(!input.trim() && attachedFiles.length === 0) || disabled}
+            className={`h-8 w-8 rounded-lg transition-all duration-300 ${(!input.trim() && attachedFiles.length === 0) ? "opacity-50" : "bg-primary text-primary-foreground shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-0.5"}`}
             data-testid={isLanding ? "button-send-main" : "button-send-chat"}
           >
             <ArrowUp className="w-4 h-4" />

@@ -46,32 +46,12 @@ export function MentorChat({ challengeContext, compact = false, currentCode }: M
     }
   }, [messages]);
 
-  const buildSystemPrompt = () => {
-    let prompt = `You are Tilper AI, a friendly coding mentor helping a teen developer.`;
-
+  // System prompt is built server-side. We just send context signals.
+  const getMinimalSystemHint = () => {
     if (challengeContext) {
-      prompt += ` The student is currently working on a coding challenge.
-
-Challenge: "${challengeContext.title}"
-Description: ${challengeContext.description}
-Language: ${challengeContext.language}
-
-Help them with:
-- Understanding the problem
-- Debugging their code
-- Explaining concepts related to the challenge
-- Giving hints (not full solutions) when they're stuck
-- Encouraging them when they make progress
-
-Be concise and conversational. Use code examples when helpful.`;
-      if (currentCode) {
-        prompt += `\n\nThe student's current code:\n\`\`\`${challengeContext.language}\n${currentCode}\n\`\`\``;
-      }
-    } else {
-      prompt += ` Be conversational, encouraging, and help them learn.`;
+      return `Student is working on challenge: "${challengeContext.title}". Help them without giving full solutions.`;
     }
-
-    return prompt;
+    return "Student is in learning mode — help them learn and grow.";
   };
 
   const sendMessage = async (content: string) => {
@@ -97,9 +77,10 @@ Be concise and conversational. Use code examples when helpful.`;
             role: m.role,
             content: m.content,
           })),
-          systemPrompt: buildSystemPrompt(),
+          systemPrompt: getMinimalSystemHint(),
           mode: "learn",
           challengeContext,
+          currentCode,
         }),
         signal: controller.signal,
       });
@@ -135,7 +116,7 @@ Be concise and conversational. Use code examples when helpful.`;
                   return updated;
                 });
               }
-            } catch {}
+            } catch { }
           }
         }
       }
@@ -186,11 +167,10 @@ Be concise and conversational. Use code examples when helpful.`;
                 </Avatar>
               )}
               <div
-                className={`max-w-[85%] rounded-md px-3 py-2 text-sm ${
-                  msg.role === "user"
+                className={`max-w-[85%] rounded-md px-3 py-2 text-sm ${msg.role === "user"
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted"
-                }`}
+                  }`}
               >
                 {msg.role === "assistant" ? (
                   <div className="prose prose-sm dark:prose-invert max-w-none [&_pre]:bg-background/50 [&_pre]:p-2 [&_pre]:rounded-md [&_pre]:text-xs [&_code]:text-xs [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1 [&_li]:text-sm [&_blockquote]:border-l-2 [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground">

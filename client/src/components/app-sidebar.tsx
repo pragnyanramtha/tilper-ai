@@ -62,38 +62,40 @@ export function AppSidebar() {
   };
 
   return (
-    <Sidebar>
-      <SidebarHeader className="p-3">
-        <div className="flex items-center justify-between gap-2">
+    <Sidebar className="!bg-transparent glass border-r border-white/10">
+      <SidebarHeader className="p-4">
+        <div className="flex items-center justify-between gap-2 px-1">
           <div
-            className="flex items-center gap-2 cursor-pointer"
+            className="flex items-center gap-3 cursor-pointer group"
             onClick={() => navigate("/")}
             data-testid="link-home-logo"
           >
-            <div className="flex items-center justify-center w-7 h-7 rounded-md bg-primary/10">
-              <Code2 className="w-4 h-4 text-primary" />
+            <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-primary/10 group-hover:bg-primary/20 transition-colors shadow-sm">
+              <Code2 className="w-5 h-5 text-primary" />
             </div>
-            <span className="font-bold text-sm">
+            <span className="font-bold text-base tracking-tight text-foreground/90 group-hover:text-primary transition-colors">
               Tilper <span className="text-primary">AI</span>
             </span>
           </div>
         </div>
         <Button
-          variant="outline"
+          variant="default"
           size="sm"
-          className="w-full mt-3 gap-1.5 justify-start"
+          className="w-full mt-4 gap-2 justify-start glass-button font-medium shadow-md hover:shadow-lg"
           onClick={handleNewChat}
           data-testid="button-new-chat"
         >
-          <Plus className="w-3.5 h-3.5" />
+          <div className="flex items-center justify-center w-5 h-5 rounded-full bg-white/20">
+            <Plus className="w-3 h-3 text-white" />
+          </div>
           New chat
         </Button>
       </SidebarHeader>
 
-      <SidebarContent>
+      <SidebarContent className="px-3 py-2">
         {activePlans.length > 0 && (
-          <SidebarGroup>
-            <SidebarGroupLabel>Learning Plans</SidebarGroupLabel>
+          <SidebarGroup className="mb-4">
+            <SidebarGroupLabel className="text-xs font-semibold tracking-wider text-muted-foreground/70 uppercase px-2 mb-2">Learning Plans</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {activePlans.map((plan) => {
@@ -104,6 +106,7 @@ export function AppSidebar() {
                       <SidebarMenuButton
                         asChild
                         data-testid={`nav-plan-${plan.id}`}
+                        className="rounded-lg hover:bg-white/10 transition-all duration-200"
                       >
                         <a
                           href="/"
@@ -112,9 +115,9 @@ export function AppSidebar() {
                             navigate("/");
                           }}
                         >
-                          <BookOpen className="w-3.5 h-3.5 text-primary" />
-                          <span className="truncate text-xs">{plan.title}</span>
-                          <span className="ml-auto text-xs text-muted-foreground">{completed}/{topics.length}</span>
+                          <BookOpen className="w-4 h-4 text-primary/80" />
+                          <span className="truncate text-sm font-medium">{plan.title}</span>
+                          <span className="ml-auto text-xs text-muted-foreground/60 bg-black/5 dark:bg-white/5 px-1.5 py-0.5 rounded-full">{completed}/{topics.length}</span>
                         </a>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -127,7 +130,7 @@ export function AppSidebar() {
 
         {recentChallenges.length > 0 && (
           <SidebarGroup>
-            <SidebarGroupLabel>Recents</SidebarGroupLabel>
+            <SidebarGroupLabel className="text-xs font-semibold tracking-wider text-muted-foreground/70 uppercase px-2 mb-2">Recents</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {recentChallenges.map((challenge) => {
@@ -139,6 +142,7 @@ export function AppSidebar() {
                         asChild
                         isActive={isActive}
                         data-testid={`nav-challenge-${challenge.id}`}
+                        className={`rounded-lg transition-all duration-200 ${isActive ? "bg-primary/10 text-primary font-medium" : "hover:bg-white/10"}`}
                       >
                         <a
                           href={`/ide?challenge=${challenge.id}`}
@@ -148,11 +152,11 @@ export function AppSidebar() {
                           }}
                         >
                           {isCompleted ? (
-                            <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+                            <CheckCircle2 className="w-4 h-4 text-green-500" />
                           ) : (
-                            <Circle className="w-3.5 h-3.5 text-muted-foreground/40" />
+                            <Circle className="w-4 h-4 text-muted-foreground/40" />
                           )}
-                          <span className="truncate text-xs">{challenge.title}</span>
+                          <span className="truncate text-sm">{challenge.title}</span>
                         </a>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -164,28 +168,30 @@ export function AppSidebar() {
         )}
       </SidebarContent>
 
-      <SidebarFooter className="p-3">
-        <div className="flex items-center justify-between gap-2">
+      <SidebarFooter className="p-4 bg-transparent">
+        <div className="flex items-center justify-between gap-2 p-1 rounded-xl bg-black/5 dark:bg-white/5 backdrop-blur-sm border border-black/5 dark:border-white/5">
           <Button
             size="sm"
             variant="ghost"
-            className="gap-1.5 text-xs justify-start flex-1"
+            className="gap-2 text-xs justify-start flex-1 hover:bg-background/50 rounded-lg h-8"
             onClick={() => navigate("/settings")}
             data-testid="nav-settings"
           >
-            <Settings className="w-3.5 h-3.5" />
-            Settings
+            <Settings className="w-4 h-4 text-muted-foreground" />
+            <span className="text-muted-foreground group-hover:text-foreground transition-colors">Settings</span>
           </Button>
+          <div className="w-[1px] h-4 bg-border/50" />
           <Button
             size="icon"
             variant="ghost"
+            className="h-8 w-8 hover:bg-background/50 rounded-lg"
             onClick={toggleTheme}
             data-testid="button-theme-toggle"
           >
             {theme === "dark" ? (
-              <Sun className="w-4 h-4" />
+              <Sun className="w-4 h-4 text-orange-400" />
             ) : (
-              <Moon className="w-4 h-4" />
+              <Moon className="w-4 h-4 text-slate-600" />
             )}
           </Button>
         </div>

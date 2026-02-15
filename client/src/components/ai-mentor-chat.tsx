@@ -44,11 +44,14 @@ export function AIMentorChat({
     setInput("");
     setIsStreaming(true);
 
-    const systemContext = `You are Tilper AI Mentor, a friendly and encouraging AI coding tutor for teenage developers. You adapt your explanations to the student's level.${
-      challengeTitle ? `\n\nCurrent challenge: "${challengeTitle}"\n${challengeDescription || ""}` : ""
-    }${userCode ? `\n\nStudent's current code:\n\`\`\`\n${userCode}\n\`\`\`` : ""}
+    // System prompt is built server-side. We send context signals.
+    const systemHint = challengeTitle
+      ? `Student is working on challenge: "${challengeTitle}". Help them without giving full solutions.`
+      : "Student is in learning mode — help them learn and grow.";
 
-Keep responses concise and educational. Use code examples when helpful. Be encouraging but honest about errors.`;
+    const challengeCtx = challengeTitle
+      ? { id: 0, title: challengeTitle, description: challengeDescription || "", language: "javascript" }
+      : undefined;
 
     try {
       const response = await fetch("/api/mentor/chat", {
@@ -59,7 +62,9 @@ Keep responses concise and educational. Use code examples when helpful. Be encou
             role: m.role,
             content: m.content,
           })),
-          systemPrompt: systemContext,
+          systemPrompt: systemHint,
+          challengeContext: challengeCtx,
+          currentCode: userCode,
         }),
       });
 
@@ -180,11 +185,10 @@ Keep responses concise and educational. Use code examples when helpful. Be encou
                 </Avatar>
               )}
               <div
-                className={`max-w-[85%] rounded-md px-3 py-2 text-sm ${
-                  msg.role === "user"
+                className={`max-w-[85%] rounded-md px-3 py-2 text-sm ${msg.role === "user"
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted"
-                }`}
+                  }`}
               >
                 {msg.role === "assistant" ? (
                   <div className="prose prose-sm dark:prose-invert max-w-none [&_pre]:bg-background/50 [&_pre]:p-2 [&_pre]:rounded-md [&_pre]:text-xs [&_code]:text-xs [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1">

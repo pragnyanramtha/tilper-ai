@@ -31,42 +31,12 @@ export function ChatPanel() {
     }
   }, [chatMessages]);
 
-  const buildSystemPrompt = () => {
+  // System prompt is built server-side. Frontend sends only mode signal.
+  const getMinimalSystemHint = () => {
     if (mode === "plan") {
-      return `You are Tilper AI, a warm, friendly AI mentor for teenage developers. You're currently in PLAN mode - your job is to have a conversation to understand what the student wants to learn.
-
-Ask about:
-- What programming topics interest them
-- Their current experience level
-- What projects excite them
-- What language they prefer (JavaScript or Python)
-- What learning style works best for them
-
-Be conversational, encouraging, and use casual language appropriate for teens. Keep responses concise (2-4 sentences typically). Ask one question at a time.
-
-${profile?.name ? `The student's name is ${profile.name}.` : "You don't know their name yet - feel free to ask!"}
-${profile?.experience ? `Their experience level: ${profile.experience}` : ""}
-${profile?.goals ? `Their goals: ${profile.goals}` : ""}
-
-When you feel you understand what they want to learn, suggest that they click "Build my plan" to generate a personalized learning path. Don't generate the plan yourself - just suggest they use the button.`;
+      return "Student is in planning mode — help them design their learning journey.";
     }
-
-    let buildContext = `You are Tilper AI, a friendly coding mentor for teenage developers. You're in BUILD mode - helping the student work through coding challenges.
-
-Be encouraging but honest about errors. Give hints rather than full solutions. Use code examples when helpful. Keep responses concise.`;
-
-    if (challenge) {
-      buildContext += `\n\nCurrent challenge: "${challenge.title}"\nDescription: ${challenge.description}\nLanguage: ${challenge.language}`;
-    }
-
-    if (profile?.name) {
-      buildContext += `\nStudent name: ${profile.name}`;
-    }
-    if (profile?.experience) {
-      buildContext += `\nExperience: ${profile.experience}`;
-    }
-
-    return buildContext;
+    return "Student is in learning mode — help them work through coding challenges.";
   };
 
   const sendMessage = async (content: string) => {
@@ -76,6 +46,15 @@ Be encouraging but honest about errors. Give hints rather than full solutions. U
     setChatMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsStreaming(true);
+
+    const challengeCtx = challenge
+      ? {
+        id: challenge.id,
+        title: challenge.title,
+        description: challenge.description,
+        language: challenge.language,
+      }
+      : undefined;
 
     try {
       const response = await fetch("/api/mentor/chat", {
@@ -89,7 +68,8 @@ Be encouraging but honest about errors. Give hints rather than full solutions. U
             role: m.role,
             content: m.content,
           })),
-          systemPrompt: buildSystemPrompt(),
+          systemPrompt: getMinimalSystemHint(),
+          challengeContext: challengeCtx,
         }),
       });
 
@@ -124,7 +104,7 @@ Be encouraging but honest about errors. Give hints rather than full solutions. U
                   return updated;
                 });
               }
-            } catch {}
+            } catch { }
           }
         }
       }
@@ -171,27 +151,27 @@ Be encouraging but honest about errors. Give hints rather than full solutions. U
   const empty = getEmptyState();
 
   return (
-    <div className="flex flex-col h-full border-l dark:bg-[#141516]/50">
-      <div className="flex items-center gap-2 p-3 border-b">
-        <div className="flex items-center justify-center w-6 h-6 rounded-md bg-primary/10">
-          <Sparkles className="w-3.5 h-3.5 text-primary" />
+    <div className="flex flex-col h-full border-l border-white/10 dark:bg-[#141516]/50 bg-white/30 backdrop-blur-sm">
+      <div className="flex items-center gap-2 p-4 border-b border-white/10 glass sticky top-0 z-10">
+        <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-primary/10 shadow-sm">
+          <Sparkles className="w-4 h-4 text-primary" />
         </div>
-        <span className="text-sm font-semibold">
+        <span className="text-sm font-semibold tracking-wide">
           {mode === "plan" ? "Plan" : "Mentor"}
         </span>
       </div>
 
       <ScrollArea className="flex-1 min-h-0" ref={scrollRef}>
-        <div className="p-3 space-y-3">
+        <div className="p-4 space-y-6">
           {chatMessages.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12 text-center px-4">
-              <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary/10 mb-3">
-                <Sparkles className="w-5 h-5 text-primary" />
+            <div className="flex flex-col items-center justify-center py-20 text-center px-6">
+              <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 mb-6 shadow-inner ring-1 ring-white/10">
+                <Sparkles className="w-8 h-8 text-primary" />
               </div>
-              <p className="text-sm font-medium mb-1" data-testid="text-chat-title">
+              <p className="text-lg font-semibold mb-2 tracking-tight" data-testid="text-chat-title">
                 {empty.title}
               </p>
-              <p className="text-xs text-muted-foreground max-w-[220px]">
+              <p className="text-sm text-muted-foreground max-w-[280px] leading-relaxed">
                 {empty.subtitle}
               </p>
             </div>
@@ -200,36 +180,35 @@ Be encouraging but honest about errors. Give hints rather than full solutions. U
           {chatMessages.map((msg, i) => (
             <div
               key={i}
-              className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+              className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-2 duration-300`}
               data-testid={`chat-message-${msg.role}-${i}`}
             >
               {msg.role === "assistant" && (
-                <Avatar className="w-6 h-6 flex-shrink-0 mt-0.5">
-                  <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                <Avatar className="w-8 h-8 flex-shrink-0 mt-1 shadow-sm ring-1 ring-white/20">
+                  <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/5 text-primary text-xs font-semibold">
                     AI
                   </AvatarFallback>
                 </Avatar>
               )}
               <div
-                className={`max-w-[85%] rounded-md px-3 py-2 text-sm ${
-                  msg.role === "user"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted"
-                }`}
+                className={`max-w-[85%] rounded-2xl px-5 py-3.5 text-sm shadow-sm ${msg.role === "user"
+                  ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
+                  : "glass-panel text-foreground"
+                  }`}
               >
                 {msg.role === "assistant" ? (
-                  <div className="prose prose-sm dark:prose-invert max-w-none [&_pre]:bg-background/50 [&_pre]:p-2 [&_pre]:rounded-md [&_pre]:text-xs [&_code]:text-xs [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1">
+                  <div className="prose prose-sm dark:prose-invert max-w-none [&_pre]:bg-black/30 [&_pre]:backdrop-blur-md [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:text-xs [&_code]:text-xs [&_p]:leading-relaxed">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
                       {msg.content || "\u200B"}
                     </ReactMarkdown>
                   </div>
                 ) : (
-                  <p>{msg.content}</p>
+                  <p className="leading-relaxed">{msg.content}</p>
                 )}
               </div>
               {msg.role === "user" && (
-                <Avatar className="w-6 h-6 flex-shrink-0 mt-0.5">
-                  <AvatarFallback className="bg-secondary text-secondary-foreground text-xs">
+                <Avatar className="w-8 h-8 flex-shrink-0 mt-1 shadow-sm ring-1 ring-white/20">
+                  <AvatarFallback className="bg-secondary text-secondary-foreground text-xs font-semibold">
                     {profile?.name?.[0]?.toUpperCase() || "U"}
                   </AvatarFallback>
                 </Avatar>
