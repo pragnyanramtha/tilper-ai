@@ -3,10 +3,29 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
+import {
+  buildSystemPrompt,
+  buildChallengeGenerationPrompt,
+  buildEvaluationPrompt,
+  buildPlanGenerationPrompt,
+  buildAnimationPrompt,
+  type StudentContext,
+} from "./prompts";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
+
+// ─── Model Routing ───
+// Sonnet for complex reasoning: main chat (agentic), animation generation
+// Haiku for structured output: challenge gen, evaluation, plan gen
+const MODELS = {
+  chat: "claude-sonnet-4-5" as const,        // Main agentic conversation — needs reasoning
+  animation: "claude-sonnet-4-5" as const,   // Visual walkthrough generation — needs creativity
+  challengeGen: "claude-haiku-4-5" as const,  // Structured JSON output
+  evaluation: "claude-haiku-4-5" as const,    // Scoring code — structured output
+  planGen: "claude-haiku-4-5" as const,       // Structured plan JSON output
+};
 
 function getSessionId(req: any): string {
   if (!req.headers["x-session-id"]) {
@@ -76,7 +95,7 @@ const MENTOR_TOOLS: Anthropic.Tool[] = [
   {
     name: "generate_challenge",
     description:
-      "Generate a coding challenge for the student to practice in the IDE. Use this when: the student wants to practice, you've identified a topic they should work on, or the conversation naturally leads to hands-on coding. This creates a challenge and gives the student a link to open it.",
+      "Generate a coding challenge for the student to practice in the IDE. Use this PROACTIVELY when: the student wants to practice, you've just finished explaining a concept, you've identified a topic they should work on, or the conversation has been theoretical for too long (3+ exchanges without hands-on coding). This creates a challenge and opens it for the student.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -101,17 +120,17 @@ const MENTOR_TOOLS: Anthropic.Tool[] = [
   {
     name: "generate_learning_plan",
     description:
-      "Generate a structured learning plan based on the conversation. Use this when: you have enough information about what the student wants to learn, their goals, and their experience level. Creates a plan with ordered topics they can work through.",
+      "Generate a structured learning plan based on the conversation. Use this when: you have enough information about what the student wants to learn (topics + experience level + goals), the student asks for a plan/roadmap/path, or you're in planning mode and the student is ready. Creates a personalized plan with ordered topics they can work through.",
     input_schema: {
       type: "object" as const,
       properties: {
         title: {
           type: "string",
-          description: "Title for the learning plan",
+          description: "Title for the learning plan — make it exciting and personal",
         },
         description: {
           type: "string",
-          description: "Brief description of the plan",
+          description: "Brief description of the plan that makes the student excited",
         },
         topics: {
           type: "array",
@@ -140,7 +159,7 @@ const MENTOR_TOOLS: Anthropic.Tool[] = [
   {
     name: "remember_about_student",
     description:
-      "Save an important detail about the student for future conversations. Use this when the student shares something meaningful about themselves: their interests, learning style, struggles, achievements, or preferences.",
+      "Save an important detail about the student for future conversations. Use this FREQUENTLY when the student shares ANYTHING meaningful: their interests, learning style, struggles, achievements, preferences, personality, career goals, hobbies, school info, or current projects. This data persists and makes you a better mentor over time.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -154,6 +173,34 @@ const MENTOR_TOOLS: Anthropic.Tool[] = [
   },
 ];
 
+/** Build full student context for the agentic prompt engine */
+async function buildStudentContext(
+  sessionId: string,
+  mode: "plan" | "learn",
+  challengeContext?: { id: number; title: string; description: string; language: string },
+  currentCode?: string
+): Promise<StudentContext> {
+  const [profile, allPlans, progress, recentChallenges] = await Promise.all([
+    storage.getProfile(sessionId),
+    storage.getLearningPlans(sessionId),
+    storage.getProgress(sessionId),
+    storage.getChallengesBySession(sessionId),
+  ]);
+
+  const activePlan = allPlans?.find(p => p.status === "active");
+
+  return {
+    profile,
+    activePlan,
+    allPlans,
+    recentChallenges: recentChallenges?.slice(0, 10),
+    progress,
+    challengeContext,
+    currentCode,
+    mode,
+  };
+}
+
 async function handleToolCall(
   toolName: string,
   toolInput: any,
@@ -166,45 +213,15 @@ async function handleToolCall(
     }
     case "generate_challenge": {
       const { topic, difficulty, language } = toolInput;
-      const langName = language === "python" ? "Python" : "JavaScript";
       const profile = await storage.getProfile(sessionId);
-      const profileHint = profile?.name
-        ? `The student's name is ${profile.name}${profile.experience ? `, experience level: ${profile.experience}` : ""}.`
-        : "";
 
       const response = await anthropic.messages.create({
-        model: "claude-haiku-4-5",
+        model: MODELS.challengeGen,
         max_tokens: 4096,
         messages: [
           {
             role: "user",
-            content: `Generate a coding challenge for a teenage developer learning ${langName}.
-${profileHint}
-
-Topic: ${topic}
-Difficulty: ${difficulty}
-Language: ${langName}
-
-Return ONLY valid JSON (no markdown, no backticks) with this exact structure:
-{
-  "title": "Short challenge title",
-  "description": "2-3 sentence description of what to build/solve",
-  "starterCode": "The starter code with function stub and example usage",
-  "solution": "The complete working solution",
-  "hints": ["hint1", "hint2", "hint3"],
-  "testCases": [
-    {"name": "Test description", "input": [arg1, arg2], "expected": expectedResult, "functionName": "theFunctionName"}
-  ]
-}
-
-Rules:
-- The starterCode must define exactly ONE function with a clear name
-- Include 3-5 test cases with diverse inputs
-- Every test case MUST include "functionName"
-- Test inputs should be arrays of arguments
-- Expected values must be concrete
-- Hints should be progressive
-- Make it educational and engaging for teens`,
+            content: buildChallengeGenerationPrompt(topic, difficulty, language, profile),
           },
         ],
       });
@@ -239,7 +256,7 @@ Rules:
       });
 
       return {
-        result: `Challenge created: "${challenge.title}" (${difficulty}, ${langName}). The student can open it in the IDE.`,
+        result: `Challenge created: "${challenge.title}" (${difficulty}, ${language === "python" ? "Python" : "JavaScript"}). The student can open it in the IDE. Tell them about it enthusiastically and include link: [Open Challenge](/ide?challenge=${challenge.id})`,
         metadata: {
           type: "challenge_created",
           challenge: { id: challenge.id, title: challenge.title },
@@ -261,8 +278,12 @@ Rules:
         status: "active",
       });
 
+      const topicList = formattedTopics
+        .map((t: any, i: number) => `${i + 1}. **${t.title}** — ${t.description}`)
+        .join("\n");
+
       return {
-        result: `Learning plan "${title}" created with ${formattedTopics.length} topics.`,
+        result: `Learning plan "${title}" created with ${formattedTopics.length} topics:\n${topicList}\n\nThe plan is now visible in the sidebar. Walk the student through the topics and suggest starting with the first one immediately.`,
         metadata: { type: "plan_created", plan: { id: plan.id, title } },
       };
     }
@@ -271,7 +292,7 @@ Rules:
       const existing = (profile?.memories as string[]) || [];
       const updated = [...existing, toolInput.memory].slice(-50);
       await storage.upsertProfile(sessionId, { memories: updated });
-      return { result: `Noted: "${toolInput.memory}"` };
+      return { result: `Noted: "${toolInput.memory}". Continue the conversation naturally — don't tell the student you saved a memory.` };
     }
     default:
       return { result: "Unknown tool" };
@@ -382,34 +403,12 @@ export async function registerRoutes(
         : "No profile info available.";
 
       const response = await anthropic.messages.create({
-        model: "claude-haiku-4-5",
+        model: MODELS.planGen,
         max_tokens: 4096,
         messages: [
           {
             role: "user",
-            content: `Based on this conversation about what a student wants to learn, generate a structured learning plan.
-
-${profileContext}
-
-Conversation summary:
-${parsed.data.conversationSummary}
-
-Return ONLY valid JSON (no markdown, no backticks):
-{
-  "title": "Plan title",
-  "description": "1-2 sentence description",
-  "topics": [
-    {
-      "title": "Topic title",
-      "description": "What will be learned",
-      "difficulty": "Beginner|Intermediate|Advanced",
-      "language": "javascript|python",
-      "status": "pending"
-    }
-  ]
-}
-
-Generate 4-8 topics in a logical learning sequence.`,
+            content: buildPlanGenerationPrompt(parsed.data.conversationSummary, profileContext),
           },
         ],
       });
@@ -617,30 +616,18 @@ Generate 4-8 topics in a logical learning sequence.`,
         totalCount > 0 ? Math.round((passedCount / totalCount) * 70) : 0;
 
       const response = await anthropic.messages.create({
-        model: "claude-haiku-4-5",
+        model: MODELS.evaluation,
         max_tokens: 1024,
         messages: [
           {
             role: "user",
-            content: `Evaluate this ${language} code submission for a coding challenge. Return ONLY valid JSON (no markdown).
-
-Challenge: ${challenge.title}
-Description: ${challenge.description}
-Expected solution approach: ${challenge.solution}
-
-Student's code:
-\`\`\`
-${code}
-\`\`\`
-
-Test results: ${passedCount}/${totalCount} passed
-
-Rate code quality (0-30 points) based on:
-- Readability and naming (0-10)
-- Efficiency (0-10)
-- Best practices (0-10)
-
-Return JSON: {"qualityScore": number, "feedback": "2-3 sentence feedback for a teen learner", "strengths": ["strength1"], "improvements": ["improvement1"]}`,
+            content: buildEvaluationPrompt(
+              code,
+              challenge,
+              language,
+              passedCount,
+              totalCount
+            ),
           },
         ],
       });
@@ -704,7 +691,7 @@ Return JSON: {"qualityScore": number, "feedback": "2-3 sentence feedback for a t
         content: z.string().min(1).max(10000),
       })
     ),
-    systemPrompt: z.string().max(20000),
+    systemPrompt: z.string().max(20000).optional(), // Now optional — server builds it
     mode: z.enum(["plan", "learn"]).optional(),
     challengeContext: z
       .object({
@@ -714,6 +701,7 @@ Return JSON: {"qualityScore": number, "feedback": "2-3 sentence feedback for a t
         language: z.string(),
       })
       .optional(),
+    currentCode: z.string().max(50000).optional(),
   });
 
   app.post("/api/mentor/chat", async (req, res) => {
@@ -722,44 +710,21 @@ Return JSON: {"qualityScore": number, "feedback": "2-3 sentence feedback for a t
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid request body" });
       }
-      const { messages, systemPrompt, challengeContext } = parsed.data;
+      const { messages, challengeContext, currentCode } = parsed.data;
+      const mode = parsed.data.mode || "learn";
 
       const sessionId = getSessionId(req);
-      const profile = await storage.getProfile(sessionId);
 
-      let enrichedPrompt = systemPrompt;
-      if (profile) {
-        const profileInfo = [
-          profile.name ? `Student name: ${profile.name}` : null,
-          profile.age ? `Age: ${profile.age}` : null,
-          profile.experience ? `Experience: ${profile.experience}` : null,
-          profile.goals ? `Goals: ${profile.goals}` : null,
-          profile.preferredLanguage
-            ? `Preferred language: ${profile.preferredLanguage}`
-            : null,
-          (profile.memories as string[])?.length > 0
-            ? `Things to remember about this student: ${(profile.memories as string[]).join("; ")}`
-            : null,
-        ]
-          .filter(Boolean)
-          .join("\n");
+      // Build rich, journey-aware context
+      const studentContext = await buildStudentContext(
+        sessionId,
+        mode,
+        challengeContext,
+        currentCode
+      );
 
-        if (profileInfo) {
-          enrichedPrompt = `${systemPrompt}\n\nStudent Profile:\n${profileInfo}`;
-        }
-      }
-
-      if (challengeContext) {
-        enrichedPrompt += `\n\nCurrent challenge context:\nTitle: ${challengeContext.title}\nDescription: ${challengeContext.description}\nLanguage: ${challengeContext.language}`;
-      }
-
-      enrichedPrompt += `\n\nIMPORTANT TOOL USAGE GUIDELINES:
-- Use web_search when the student asks about real-world topics (jobs, companies, industry, current tech trends)
-- Use generate_challenge when the student is ready to practice or you want to give them a hands-on exercise
-- Use generate_learning_plan when you have enough info about what they want to learn (in plan mode especially)
-- Use remember_about_student to save important details about the student
-- When you create a challenge, tell the student about it and include a message like "I've created a challenge for you! Click the link in the sidebar or [open it here](/ide?challenge=ID)" 
-- Be proactive about creating challenges when it makes sense - don't just talk, get them coding!`;
+      // Build the agentic system prompt from the prompt engine
+      const agenticPrompt = buildSystemPrompt(studentContext);
 
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
@@ -776,9 +741,9 @@ Return JSON: {"qualityScore": number, "feedback": "2-3 sentence feedback for a t
       while (round < MAX_TOOL_ROUNDS) {
         round++;
         const response = await anthropic.messages.create({
-          model: "claude-haiku-4-5",
+          model: MODELS.chat,
           max_tokens: 8192,
-          system: enrichedPrompt,
+          system: agenticPrompt,
           messages: currentMessages,
           tools: MENTOR_TOOLS,
         });
@@ -873,39 +838,12 @@ Return JSON: {"qualityScore": number, "feedback": "2-3 sentence feedback for a t
       const { topic, title, description } = parsed.data;
 
       const response = await anthropic.messages.create({
-        model: "claude-haiku-4-5",
+        model: MODELS.animation,
         max_tokens: 8192,
         messages: [
           {
             role: "user",
-            content: `Generate a visual step-by-step walkthrough showing how to solve this specific coding challenge. Focus on the ALGORITHM and APPROACH, not just data structure definitions.
-
-Topic: ${topic}
-Title: ${title}
-Description: ${description}
-
-Create 6-8 animation steps that walk through:
-1. Understanding the problem (what input/output looks like)
-2. The key insight or approach
-3. Step-by-step algorithm walkthrough with a small example
-4. The final solution idea
-
-Use the student's preferred language for any code examples (based on the challenge language, NOT C++).
-
-Return a JSON array of animation steps. Each step should be an object with:
-- type: "text" | "code" | "diagram" | "highlight" | "comparison" | "steps"
-- content: the text/code/diagram-keyword to display
-- duration: number of seconds (2-5)
-- color: optional hex color (use #d97757 for accent, #a8cc8c for success, #e06c75 for error)
-- fontSize: optional font size for text type (14-24)
-- subtitle: optional secondary text to show below main content
-
-For diagram type, use keywords: "array", "linked-list", "stack", "queue", "tree", "sorting", "loop", "recursion", "flow", "hashmap", "graph"
-For "comparison" type, content should be "left_label|right_label|left_code|right_code"
-For "steps" type, content should be step descriptions separated by "|"
-
-Focus on showing the logic flow and problem-solving process for THIS specific challenge, using examples from the description.
-Return ONLY a valid JSON array, no markdown wrapping.`,
+            content: buildAnimationPrompt(topic, title, description),
           },
         ],
       });

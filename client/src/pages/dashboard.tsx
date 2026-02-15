@@ -62,30 +62,12 @@ export default function Dashboard() {
     }
   }, [chatMessages]);
 
-  const buildSystemPrompt = () => {
-    let prompt = `You are Tilper AI, a warm, friendly AI mentor for teenage developers. You help them learn coding through personalized guidance.
-
-Be conversational, encouraging, and use casual language appropriate for teens. Keep responses concise but thorough. Ask questions to understand their needs.
-
-${profile?.name ? `The student's name is ${profile.name}.` : ""}
-${profile?.experience ? `Experience level: ${profile.experience}` : ""}
-${profile?.goals ? `Goals: ${profile.goals}` : ""}
-${profile?.preferredLanguage ? `Preferred language: ${profile.preferredLanguage}` : ""}`;
-
-    if (mode === "plan") {
-      prompt += `\n\nYou're in PLAN mode - helping the student plan their learning journey. Ask about what they want to learn, their interests, career goals, and create a roadmap.
-When you have enough information, tell them you can generate a personalized learning plan - suggest they ask you to "create my plan" or similar.
-If they mention career goals (like working at a specific company), think about what skills they'd need and help them plan accordingly.`;
-    } else {
-      prompt += `\n\nYou're in LEARN mode - helping the student learn and practice coding. You can:
-- Explain concepts clearly with examples
-- Help debug code
-- Suggest practice problems
-- Give hints rather than full solutions
-When they want to practice a specific topic, suggest generating a challenge for them.`;
-    }
-
-    return prompt;
+  // System prompt is now built server-side by the prompt engine.
+  // The frontend only sends mode + challenge context as signals.
+  const getMinimalSystemHint = () => {
+    return mode === "plan"
+      ? "Student is in planning mode — help them design their learning journey."
+      : "Student is in learning mode — help them learn, practice, and grow.";
   };
 
   const sendMessage = async (content: string, _files?: AttachedFile[]) => {
@@ -145,7 +127,7 @@ When they want to practice a specific topic, suggest generating a challenge for 
             role: m.role,
             content: m.content,
           })),
-          systemPrompt: buildSystemPrompt(),
+          systemPrompt: getMinimalSystemHint(),
           mode,
         }),
       });
@@ -195,7 +177,7 @@ When they want to practice a specific topic, suggest generating a challenge for 
                   queryClient.invalidateQueries({ queryKey: ["/api/plans"] });
                 }
               }
-            } catch {}
+            } catch { }
           }
         }
       }
@@ -305,11 +287,10 @@ When they want to practice a specific topic, suggest generating a challenge for 
                   </Avatar>
                 )}
                 <div
-                  className={`max-w-[80%] rounded-md px-3.5 py-2.5 text-sm ${
-                    msg.role === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted"
-                  }`}
+                  className={`max-w-[80%] rounded-md px-3.5 py-2.5 text-sm ${msg.role === "user"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted"
+                    }`}
                 >
                   {msg.role === "assistant" ? (
                     <div className="prose prose-sm dark:prose-invert max-w-none [&_pre]:bg-background/50 [&_pre]:p-2 [&_pre]:rounded-md [&_pre]:text-xs [&_code]:text-xs [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1 [&_li]:text-sm [&_blockquote]:border-l-2 [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground">
