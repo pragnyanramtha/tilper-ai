@@ -17,10 +17,12 @@ import {
   Play,
   ArrowLeft,
   Sparkles,
+  MessageCircle,
 } from "lucide-react";
 import { CodeEditor } from "@/components/code-editor";
 import { AnimationViewer } from "@/components/animation-viewer";
 import { ChallengeDetail } from "@/components/challenge-panel";
+import { MentorChat } from "@/components/mentor-chat";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { runCode, preloadPyodide } from "@/lib/code-runner";
 import { useAppContext } from "@/lib/app-context";
@@ -227,6 +229,14 @@ export default function IDEPage() {
           <Play className="w-3.5 h-3.5 mr-1.5" />
           Visual
         </TabsTrigger>
+        <TabsTrigger
+          value="mentor"
+          className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2.5 text-xs"
+          data-testid="tab-mentor"
+        >
+          <MessageCircle className="w-3.5 h-3.5 mr-1.5" />
+          Mentor
+        </TabsTrigger>
       </TabsList>
       <TabsContent value="lesson" className="flex-1 mt-0 overflow-auto">
         <div className="p-4">
@@ -285,6 +295,17 @@ export default function IDEPage() {
           animationData={animationData}
           isLoading={isAnimationLoading}
           onRequestAnimation={handleRequestAnimation}
+        />
+      </TabsContent>
+      <TabsContent value="mentor" className="flex-1 mt-0 min-h-0">
+        <MentorChat
+          challengeContext={{
+            id: challenge.id,
+            title: challenge.title,
+            description: challenge.description,
+            language: challenge.language,
+          }}
+          compact
         />
       </TabsContent>
     </Tabs>

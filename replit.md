@@ -8,6 +8,7 @@ An educational technology platform for teenage developers to learn coding throug
 - **Backend**: Express.js, Drizzle ORM, PostgreSQL
 - **AI**: Anthropic Claude via Replit AI Integrations (claude-sonnet-4-5 for chat/generation, claude-haiku-4-5 for animations/evaluation)
 - **Code Execution**: Client-side (JavaScript via Function constructor, Python via Pyodide WebAssembly)
+- **AI Agent Tools**: web_search (DuckDuckGo), generate_challenge, generate_learning_plan, remember_about_student (max 5 tool rounds)
 
 ## Key Pages
 - `/` - Chat-first dashboard (Claude.ai style)
@@ -15,13 +16,20 @@ An educational technology platform for teenage developers to learn coding throug
   - **Chat view**: Full-width chat messages in main area, input at bottom
   - **Plan mode**: AI learns about user, can generate learning plans from conversation
   - **Learn mode**: AI helps with coding concepts, challenges, debugging
-- `/ide?challenge=<id>` - IDE page with split-pane layout (lesson/visual tabs on left, code editor on right)
+- `/ide?challenge=<id>` - IDE page with split-pane layout (lesson/visual/mentor tabs on left, code editor on right)
 - `/settings` - Full settings page with profile, AI memories, learning plans overview
 
 ## Layout
 - Sidebar (left): Tilper AI logo, "New chat" button, Learning Plans, Recent challenges, Settings + theme toggle at bottom
 - Main content (center): Chat-first interface (greeting + input + pills when empty, chat messages when active)
 - No persistent right panel - chat IS the main content
+
+## Key Components
+- `client/src/components/chat-input.tsx` - Reusable chat input with auto-grow textarea, file upload, mode badges (Plan/Learn), landing/inline variants
+- `client/src/components/mentor-chat.tsx` - Reusable AI mentor chat component for IDE contextual help, uses streaming SSE
+- `client/src/components/animation-viewer.tsx` - Canvas-based concept visualizations with 12+ diagram types (tree, stack, queue, linked list, sorting, hashmap, array, loop, graph, function, conditional, variables)
+- `client/src/components/code-editor.tsx` - CodeMirror editor with run/submit/reset controls
+- `client/src/components/challenge-panel.tsx` - Challenge detail display
 
 ## API Routes
 - `GET /api/profile` - Get user profile
@@ -38,7 +46,7 @@ An educational technology platform for teenage developers to learn coding throug
 - `GET /api/progress/:challengeId` - Get progress for specific challenge
 - `POST /api/progress/save` - Save code progress
 - `POST /api/submissions/evaluate` - AI-evaluate code submission (returns score, feedback, strengths, improvements)
-- `POST /api/mentor/chat` - AI mentor chat (SSE streaming, enriched with profile context)
+- `POST /api/mentor/chat` - AI mentor chat (SSE streaming with tool-use: web_search, generate_challenge, generate_learning_plan, remember_about_student)
 - `POST /api/animations/generate` - Generate animation steps via AI
 
 ## Database Schema
@@ -65,6 +73,8 @@ An educational technology platform for teenage developers to learn coding throug
 - Wraps entire app for cross-component state sharing
 
 ## Recent Changes
+- Feb 15, 2026: Added Mentor tab to IDE page with contextual chat, upgraded animation system with 12+ diagram types (tree, stack, queue, linked list, sorting, hashmap, graph, conditional, function, variables)
+- Feb 15, 2026: Added agentic AI with tool-use (web search, challenge generation, learning plan creation, memory saving), modular ChatInput with file upload and mode badges
 - Feb 15, 2026: Redesigned to Claude.ai-style chat-first interface, renamed Build to Learn, removed right chat panel, added action pills, full settings page
 - Feb 15, 2026: Added Plan/Build modes, persistent AI chat panel, user profiles with memories, learning plans, profile page
 - Feb 15, 2026: Initial MVP build - dynamic AI challenge generation, Pyodide Python support, client-side code execution, AI scoring
