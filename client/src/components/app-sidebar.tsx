@@ -81,11 +81,13 @@ export function AppSidebar() {
     setIsInChat(false);
     setMode("plan");
     setActiveConversationId(null);
+    setActivePlanId(null);
     navigate("/");
   };
 
   const handleConversationClick = async (conv: Conversation) => {
     setActiveConversationId(conv.id);
+    setActivePlanId(null);
     setIsInChat(true);
     setMode("learn");
 

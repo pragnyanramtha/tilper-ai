@@ -9,142 +9,142 @@
 import type { UserProfile, LearningPlan, Challenge, UserProgress } from "@shared/schema";
 
 export interface StudentContext {
-    profile?: UserProfile;
-    activePlan?: LearningPlan;
-    allPlans?: LearningPlan[];
-    recentChallenges?: Challenge[];
-    progress?: UserProgress[];
-    challengeContext?: {
-        id: number;
-        title: string;
-        description: string;
-        language: string;
-    };
-    currentCode?: string;
-    mode: "plan" | "learn";
+  profile?: UserProfile;
+  activePlan?: LearningPlan;
+  allPlans?: LearningPlan[];
+  recentChallenges?: Challenge[];
+  progress?: UserProgress[];
+  challengeContext?: {
+    id: number;
+    title: string;
+    description: string;
+    language: string;
+  };
+  currentCode?: string;
+  mode: "plan" | "learn";
 }
 
 export type AgentPhase =
-    | "discovery"      // First conversation — learning who the student is
-    | "planning"       // Building/refining a learning plan
-    | "teaching"       // Explaining concepts before a challenge
-    | "challenging"    // Student is working on a challenge
-    | "reviewing"      // After submission — giving feedback
-    | "transitioning"; // Moving between challenges/topics
+  | "discovery"      // First conversation — learning who the student is
+  | "planning"       // Building/refining a learning plan
+  | "teaching"       // Explaining concepts before a challenge
+  | "challenging"    // Student is working on a challenge
+  | "reviewing"      // After submission — giving feedback
+  | "transitioning"; // Moving between challenges/topics
 
 function detectPhase(ctx: StudentContext): AgentPhase {
-    // If student is in an active challenge context
-    if (ctx.challengeContext) {
-        // Check if they completed this challenge
-        const challengeProgress = ctx.progress?.find(
-            p => p.challengeId === ctx.challengeContext!.id
-        );
-        if (challengeProgress?.status === "completed") {
-            return "reviewing";
-        }
-        return "challenging";
+  // If student is in an active challenge context
+  if (ctx.challengeContext) {
+    // Check if they completed this challenge
+    const challengeProgress = ctx.progress?.find(
+      p => p.challengeId === ctx.challengeContext!.id
+    );
+    if (challengeProgress?.status === "completed") {
+      return "reviewing";
     }
+    return "challenging";
+  }
 
-    // If no profile or very minimal profile — discovery phase
-    if (!ctx.profile || (!ctx.profile.name && !ctx.profile.experience && !ctx.profile.goals)) {
-        return "discovery";
+  // If no profile or very minimal profile — discovery phase
+  if (!ctx.profile || (!ctx.profile.name && !ctx.profile.experience && !ctx.profile.goals)) {
+    return "discovery";
+  }
+
+  // If in plan mode or no active plan yet
+  if (ctx.mode === "plan" || (!ctx.activePlan && (!ctx.allPlans || ctx.allPlans.length === 0))) {
+    return "planning";
+  }
+
+  // If they have a plan with completed topics — check if transitioning
+  if (ctx.activePlan) {
+    const topics = (ctx.activePlan.topics as any[]) || [];
+    const completedCount = topics.filter(t => t.status === "completed").length;
+    const totalCount = topics.length;
+
+    if (completedCount > 0 && completedCount < totalCount) {
+      // Some done, some pending — they might be transitioning
+      return "transitioning";
     }
-
-    // If in plan mode or no active plan yet
-    if (ctx.mode === "plan" || (!ctx.activePlan && (!ctx.allPlans || ctx.allPlans.length === 0))) {
-        return "planning";
+    if (completedCount === totalCount && totalCount > 0) {
+      return "reviewing";
     }
+  }
 
-    // If they have a plan with completed topics — check if transitioning
-    if (ctx.activePlan) {
-        const topics = (ctx.activePlan.topics as any[]) || [];
-        const completedCount = topics.filter(t => t.status === "completed").length;
-        const totalCount = topics.length;
-
-        if (completedCount > 0 && completedCount < totalCount) {
-            // Some done, some pending — they might be transitioning
-            return "transitioning";
-        }
-        if (completedCount === totalCount && totalCount > 0) {
-            return "reviewing";
-        }
-    }
-
-    return "teaching";
+  return "teaching";
 }
 
 function buildProfileBlock(profile?: UserProfile): string {
-    if (!profile) return "";
+  if (!profile) return "";
 
-    const parts: string[] = [];
-    if (profile.name) parts.push(`**Name:** ${profile.name}`);
-    if (profile.age) parts.push(`**Age:** ${profile.age}`);
-    if (profile.experience) parts.push(`**Experience:** ${profile.experience}`);
-    if (profile.goals) parts.push(`**Goals:** ${profile.goals}`);
-    if (profile.preferredLanguage) parts.push(`**Preferred Language:** ${profile.preferredLanguage}`);
+  const parts: string[] = [];
+  if (profile.name) parts.push(`**Name:** ${profile.name}`);
+  if (profile.age) parts.push(`**Age:** ${profile.age}`);
+  if (profile.experience) parts.push(`**Experience:** ${profile.experience}`);
+  if (profile.goals) parts.push(`**Goals:** ${profile.goals}`);
+  if (profile.preferredLanguage) parts.push(`**Preferred Language:** ${profile.preferredLanguage}`);
 
-    const memories = (profile.memories as string[]) || [];
-    if (memories.length > 0) {
-        parts.push(`**Things you remember about them:** ${memories.slice(-10).join("; ")}`);
-    }
+  const memories = (profile.memories as string[]) || [];
+  if (memories.length > 0) {
+    parts.push(`**Things you remember about them:** ${memories.slice(-10).join("; ")}`);
+  }
 
-    if (parts.length === 0) return "";
-    return `\n\n## Student Profile\n${parts.join("\n")}`;
+  if (parts.length === 0) return "";
+  return `\n\n## Student Profile\n${parts.join("\n")}`;
 }
 
 function buildProgressBlock(ctx: StudentContext): string {
-    const parts: string[] = [];
+  const parts: string[] = [];
 
-    if (ctx.activePlan) {
-        const topics = (ctx.activePlan.topics as any[]) || [];
-        const completed = topics.filter(t => t.status === "completed").length;
-        const total = topics.length;
-        const current = topics.find(t => t.status !== "completed");
+  if (ctx.activePlan) {
+    const topics = (ctx.activePlan.topics as any[]) || [];
+    const completed = topics.filter(t => t.status === "completed").length;
+    const total = topics.length;
+    const current = topics.find(t => t.status !== "completed");
 
-        parts.push(`\n## Active Learning Plan: "${ctx.activePlan.title}"`);
-        parts.push(`Progress: ${completed}/${total} topics completed`);
+    parts.push(`\n## Active Learning Plan: "${ctx.activePlan.title}"`);
+    parts.push(`Progress: ${completed}/${total} topics completed`);
 
-        if (current) {
-            parts.push(`**Current topic:** ${current.title} — ${current.description}`);
-        }
-
-        if (completed > 0) {
-            const completedTopics = topics.filter(t => t.status === "completed");
-            parts.push(`**Completed:** ${completedTopics.map(t => t.title).join(", ")}`);
-        }
+    if (current) {
+      parts.push(`**Current topic:** ${current.title} — ${current.description}`);
     }
 
-    if (ctx.progress && ctx.progress.length > 0) {
-        const completedChallenges = ctx.progress.filter(p => p.status === "completed");
-        const avgScore = completedChallenges.length > 0
-            ? Math.round(completedChallenges.reduce((sum, p) => sum + (p.score || 0), 0) / completedChallenges.length)
-            : null;
-
-        parts.push(`\n## Challenge Progress`);
-        parts.push(`Challenges attempted: ${ctx.progress.length}`);
-        parts.push(`Challenges completed: ${completedChallenges.length}`);
-        if (avgScore !== null) parts.push(`Average score: ${avgScore}/100`);
+    if (completed > 0) {
+      const completedTopics = topics.filter(t => t.status === "completed");
+      parts.push(`**Completed:** ${completedTopics.map(t => t.title).join(", ")}`);
     }
+  }
 
-    return parts.join("\n");
+  if (ctx.progress && ctx.progress.length > 0) {
+    const completedChallenges = ctx.progress.filter(p => p.status === "completed");
+    const avgScore = completedChallenges.length > 0
+      ? Math.round(completedChallenges.reduce((sum, p) => sum + (p.score || 0), 0) / completedChallenges.length)
+      : null;
+
+    parts.push(`\n## Challenge Progress`);
+    parts.push(`Challenges attempted: ${ctx.progress.length}`);
+    parts.push(`Challenges completed: ${completedChallenges.length}`);
+    if (avgScore !== null) parts.push(`Average score: ${avgScore}/100`);
+  }
+
+  return parts.join("\n");
 }
 
 function buildChallengeContextBlock(ctx: StudentContext): string {
-    if (!ctx.challengeContext) return "";
+  if (!ctx.challengeContext) return "";
 
-    let block = `\n\n## Current Challenge Context
+  let block = `\n\n## Current Challenge Context
 **Title:** ${ctx.challengeContext.title}
 **Description:** ${ctx.challengeContext.description}
 **Language:** ${ctx.challengeContext.language}`;
 
-    if (ctx.currentCode) {
-        block += `\n\n**Student's current code:**
+  if (ctx.currentCode) {
+    block += `\n\n**Student's current code:**
 \`\`\`${ctx.challengeContext.language}
 ${ctx.currentCode}
 \`\`\``;
-    }
+  }
 
-    return block;
+  return block;
 }
 
 const CORE_IDENTITY = `You are **Tilper AI**, a world-class coding mentor purpose-built for teenage developers. You're not just a chatbot — you're a patient, encouraging, and insightful mentor who genuinely cares about the student's growth.
@@ -164,7 +164,7 @@ const CORE_IDENTITY = `You are **Tilper AI**, a world-class coding mentor purpos
 5. **Be honest** — If code has bugs, say so kindly. If an approach is suboptimal, explain why.`;
 
 const PHASE_INSTRUCTIONS: Record<AgentPhase, string> = {
-    discovery: `## Current Phase: DISCOVERY 🔍
+  discovery: `## Current Phase: DISCOVERY 🔍
 You're meeting this student for the first time. Your goal is to learn about them and build rapport.
 
 **Your Objectives:**
@@ -181,7 +181,7 @@ You're meeting this student for the first time. Your goal is to learn about them
 **Flow to Next Phase:**
 When you have enough info about the student (name, interests, experience, goals), encourage them to let you build a learning plan. Use \`generate_learning_plan\` when they agree.`,
 
-    planning: `## Current Phase: PLANNING 🗺️
+  planning: `## Current Phase: PLANNING 🗺️
 You're helping the student design their learning journey.
 
 **Your Objectives:**
@@ -197,7 +197,7 @@ You're helping the student design their learning journey.
 **Flow to Next Phase:**
 After creating a plan, immediately suggest starting with the first topic: "Great plan! Want to dive into [first topic]? I can explain the concept first, or jump straight into a challenge if you're feeling confident!"`,
 
-    teaching: `## Current Phase: TEACHING 📚
+  teaching: `## Current Phase: TEACHING 📚
 You're explaining concepts and preparing the student for practice.
 
 **Your Objectives:**
@@ -214,7 +214,7 @@ You're explaining concepts and preparing the student for practice.
 **Flow to Next Phase:**
 When the concept clicks, proactively offer a challenge: "You're getting this! Want to test your skills? I'll create a challenge on [topic]." Use \`generate_challenge\` to create one.`,
 
-    challenging: `## Current Phase: CHALLENGE MODE ⚡
+  challenging: `## Current Phase: CHALLENGE MODE ⚡
 The student is actively working on a coding challenge.
 
 **Your Objectives:**
@@ -232,7 +232,7 @@ The student is actively working on a coding challenge.
 **Flow to Next Phase:**
 After they complete the challenge (or decide to move on), transition to review: Celebrate what they learned, summarize the key takeaway, then suggest the next topic from their plan.`,
 
-    reviewing: `## Current Phase: REVIEW & CELEBRATE 🎉
+  reviewing: `## Current Phase: REVIEW & CELEBRATE 🎉
 The student just finished a challenge or topic.
 
 **Your Objectives:**
@@ -248,7 +248,7 @@ The student just finished a challenge or topic.
 **Flow to Next Phase:**
 Suggest the next logical step from their learning plan. Use \`generate_challenge\` to create the next challenge, or teach the next concept first if it's a new topic. Keep the energy up — learning should feel like leveling up in a game.`,
 
-    transitioning: `## Current Phase: TRANSITIONING 🔄
+  transitioning: `## Current Phase: TRANSITIONING 🔄
 The student is between topics or challenges.
 
 **Your Objectives:**
@@ -311,32 +311,32 @@ const RESPONSE_FORMAT = `
 - End responses with a QUESTION or ACTION SUGGESTION to keep momentum`;
 
 export function buildSystemPrompt(ctx: StudentContext): string {
-    const phase = detectPhase(ctx);
+  const phase = detectPhase(ctx);
 
-    const parts = [
-        CORE_IDENTITY,
-        buildProfileBlock(ctx.profile),
-        buildProgressBlock(ctx),
-        buildChallengeContextBlock(ctx),
-        PHASE_INSTRUCTIONS[phase],
-        TOOL_INSTRUCTIONS,
-        RESPONSE_FORMAT,
-    ];
+  const parts = [
+    CORE_IDENTITY,
+    buildProfileBlock(ctx.profile),
+    buildProgressBlock(ctx),
+    buildChallengeContextBlock(ctx),
+    PHASE_INSTRUCTIONS[phase],
+    TOOL_INSTRUCTIONS,
+    RESPONSE_FORMAT,
+  ];
 
-    return parts.filter(Boolean).join("\n\n");
+  return parts.filter(Boolean).join("\n\n");
 }
 
 export function buildChallengeGenerationPrompt(
-    topic: string,
-    difficulty: string,
-    language: string,
-    profile?: UserProfile
+  topic: string,
+  difficulty: string,
+  language: string,
+  profile?: UserProfile
 ): string {
-    const profileHint = profile?.name
-        ? `The student's name is ${profile.name}${profile.experience ? `, experience level: ${profile.experience}` : ""}.`
-        : "";
+  const profileHint = profile?.name
+    ? `The student's name is ${profile.name}${profile.experience ? `, experience level: ${profile.experience}` : ""}.`
+    : "";
 
-    return `Generate a coding challenge for a teenage developer learning ${language}.
+  return `Generate a coding challenge for a teenage developer learning ${language}.
 ${profileHint}
 
 Topic: ${topic}
@@ -363,15 +363,17 @@ Rules:
 - Expected values must be concrete
 - Hints should be progressive (vague → specific)
 - Make it fun and relatable for teens (use real-world examples when possible)
-- The challenge should test understanding, not just syntax`;
+- The challenge should test understanding, not just syntax
+- CRITICAL: The 'starterCode' and 'solution' MUST be valid code in the requested '${language}'. Do NOT default to Python or JavaScript unless requested.
+- Ensure function signatures and types match the idiom of the requested '${language}'.`;
 }
 
 export function buildEvaluationPrompt(
-    code: string,
-    challenge: { title: string; description: string; solution: string; testCases: any },
-    language: string
+  code: string,
+  challenge: { title: string; description: string; solution: string; testCases: any },
+  language: string
 ): string {
-    return `You are an expert code evaluator/compiler. Evaluate this ${language} code submission for a coding challenge.
+  return `You are an expert code evaluator/compiler. Evaluate this ${language} code submission for a coding challenge.
     
     Instead of running this code, I want you to SIMULATE the execution of the test cases against the user's code.
     Be extremely strict and precise. Function names must match. Logic must be correct.
@@ -404,10 +406,10 @@ Return ONLY valid JSON (no markdown) with this structure:
 }
 
 export function buildPlanGenerationPrompt(
-    conversationSummary: string,
-    profileContext: string
+  conversationSummary: string,
+  profileContext: string
 ): string {
-    return `Based on this conversation about what a student wants to learn, generate a structured learning plan.
+  return `Based on this conversation about what a student wants to learn, generate a structured learning plan.
 
 ${profileContext}
 
@@ -423,7 +425,7 @@ Return ONLY valid JSON (no markdown, no backticks):
       "title": "Topic title",
       "description": "What will be learned and WHY it matters",
       "difficulty": "Beginner|Intermediate|Advanced",
-      "language": "javascript|python",
+      "language": "string (e.g., javascript, python, rust, go, cpp)",
       "status": "pending"
     }
   ]
@@ -439,11 +441,11 @@ Rules:
 }
 
 export function buildAnimationPrompt(
-    topic: string,
-    title: string,
-    description: string
+  topic: string,
+  title: string,
+  description: string
 ): string {
-    return `You are an expert at creating educational programming animations similar to 3Blue1Brown and Manim style. Generate a sequence of animation steps to visualize the concept: "${topic}".
+  return `You are an expert at creating educational programming animations similar to 3Blue1Brown and Manim style. Generate a sequence of animation steps to visualize the concept: "${topic}".
 
 Challenge: ${title}
 Description: ${description}

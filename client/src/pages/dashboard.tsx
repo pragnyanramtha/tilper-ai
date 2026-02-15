@@ -54,10 +54,6 @@ export default function Dashboard() {
     activePlanId,
   } = useAppContext();
 
-  if (activePlanId) {
-    return <PlanViewer />;
-  }
-
   const [isStreaming, setIsStreaming] = useState(false);
   const [thinkingMessage, setThinkingMessage] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -71,6 +67,10 @@ export default function Dashboard() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [chatMessages]);
+
+  if (activePlanId) {
+    return <PlanViewer />;
+  }
 
   // System prompt is now built server-side by the prompt engine.
   // The frontend only sends mode + challenge context as signals.

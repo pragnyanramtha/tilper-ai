@@ -1,5 +1,6 @@
 
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { ArrowLeft, BookOpen, CheckCircle2, Circle, Clock, Loader2, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +12,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 
 export function PlanViewer() {
     const { activePlanId, setActivePlanId, setActiveChallengeId, setMode } = useAppContext();
+    const [, navigate] = useLocation();
 
     const { data: plan, isLoading } = useQuery<LearningPlan>({
         queryKey: ["/api/plans", activePlanId],
@@ -40,6 +42,8 @@ export function PlanViewer() {
 
     const topics = (plan.topics as any[]) || [];
 
+    // ... (rest of component)
+
     const handleStartTopic = async (topic: any) => {
         // Generate a challenge for this topic
         try {
@@ -57,6 +61,7 @@ export function PlanViewer() {
             setActivePlanId(null);
             setActiveChallengeId(challenge.id);
             setMode("learn");
+            navigate(`/ide?challenge=${challenge.id}`);
         } catch (e) {
             console.error("Failed to start topic:", e);
         }
@@ -89,7 +94,7 @@ export function PlanViewer() {
                                     <div className="flex items-start justify-between gap-4">
                                         <div className="flex items-center gap-3">
                                             <div className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center border ${isCompleted ? "bg-green-500/10 border-green-500 text-green-500" :
-                                                    isNext ? "bg-primary/10 border-primary text-primary" : "border-muted-foreground/30 text-muted-foreground/30"
+                                                isNext ? "bg-primary/10 border-primary text-primary" : "border-muted-foreground/30 text-muted-foreground/30"
                                                 }`}>
                                                 {isCompleted ? <CheckCircle2 className="w-3.5 h-3.5" /> :
                                                     isNext ? <Play className="w-3 h-3 ml-0.5" /> :
