@@ -5,8 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 
 const anthropic = new Anthropic({
-  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
+  apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
 function getSessionId(req: any): string {
@@ -174,7 +173,7 @@ async function handleToolCall(
         : "";
 
       const response = await anthropic.messages.create({
-        model: "claude-sonnet-4-5",
+        model: "claude-haiku-4-5",
         max_tokens: 4096,
         messages: [
           {
@@ -383,7 +382,7 @@ export async function registerRoutes(
         : "No profile info available.";
 
       const response = await anthropic.messages.create({
-        model: "claude-sonnet-4-5",
+        model: "claude-haiku-4-5",
         max_tokens: 4096,
         messages: [
           {
@@ -777,7 +776,7 @@ Return JSON: {"qualityScore": number, "feedback": "2-3 sentence feedback for a t
       while (round < MAX_TOOL_ROUNDS) {
         round++;
         const response = await anthropic.messages.create({
-          model: "claude-sonnet-4-5",
+          model: "claude-haiku-4-5",
           max_tokens: 8192,
           system: enrichedPrompt,
           messages: currentMessages,
@@ -874,7 +873,7 @@ Return JSON: {"qualityScore": number, "feedback": "2-3 sentence feedback for a t
       const { topic, title, description } = parsed.data;
 
       const response = await anthropic.messages.create({
-        model: "claude-sonnet-4-5",
+        model: "claude-haiku-4-5",
         max_tokens: 8192,
         messages: [
           {
