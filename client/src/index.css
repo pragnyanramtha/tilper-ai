@@ -99,12 +99,12 @@
   --card: 40 3% 17%;
   --card-foreground: 40 5% 93%;
   --card-border: 40 3% 24%;
-  --sidebar: 40 3% 13%;
+  --sidebar: 210 5% 8%;
   --sidebar-foreground: 40 5% 90%;
-  --sidebar-border: 40 3% 22%;
+  --sidebar-border: 210 4% 14%;
   --sidebar-primary: 15 63% 60%;
   --sidebar-primary-foreground: 15 63% 98%;
-  --sidebar-accent: 40 4% 20%;
+  --sidebar-accent: 210 4% 14%;
   --sidebar-accent-foreground: 40 4% 92%;
   --sidebar-ring: 15 63% 60%;
   --popover: 40 3% 19%;

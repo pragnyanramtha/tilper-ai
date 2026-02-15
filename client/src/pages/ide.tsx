@@ -175,7 +175,7 @@ export default function IDEPage() {
 
   const leftContent = (
     <Tabs value={leftTab} onValueChange={setLeftTab} className="h-full flex flex-col">
-      <TabsList className="w-full justify-start rounded-none border-b bg-transparent p-0 h-auto">
+      <TabsList className="w-full justify-start rounded-none border-b bg-transparent dark:bg-[#141516] p-0 h-auto">
         <TabsTrigger
           value="lesson"
           className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2.5 text-xs"
@@ -240,7 +240,7 @@ export default function IDEPage() {
 
   return (
     <div className="h-screen flex flex-col bg-background">
-      <header className="flex items-center justify-between gap-2 px-3 py-1.5 border-b bg-card/50">
+      <header className="flex items-center justify-between gap-2 px-3 py-1.5 border-b bg-card/50 dark:bg-[#141516]">
         <div className="flex items-center gap-2 min-w-0">
           <Button
             size="icon"

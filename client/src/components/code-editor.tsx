@@ -42,7 +42,7 @@ export function CodeEditor({
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between gap-2 p-2 border-b bg-card">
+      <div className="flex items-center justify-between gap-2 p-2 border-b bg-card dark:bg-[#141516]">
         <div className="flex items-center gap-2 flex-wrap">
           <Badge variant="secondary" className="font-mono text-xs">
             {language === "javascript" ? "JS" : "PY"}
@@ -125,7 +125,7 @@ export function CodeEditor({
             <span>{showOutput ? "Hide" : "Show"}</span>
           </button>
           {showOutput && (
-            <div className="p-3 max-h-48 overflow-auto bg-muted/30">
+            <div className="p-3 max-h-48 overflow-auto bg-muted/30 dark:bg-[#141516]/60">
               {testResults && testResults.length > 0 && (
                 <div className="space-y-1 mb-2">
                   {testResults.map((test, i) => (
