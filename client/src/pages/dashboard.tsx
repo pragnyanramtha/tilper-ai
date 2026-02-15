@@ -111,7 +111,7 @@ export default function Dashboard() {
               <Code2 className="w-5 h-5 text-primary" />
             </div>
             <span className="font-bold text-lg">
-              Code<span className="text-primary">Quest</span>
+              Tilper <span className="text-primary">AI</span>
             </span>
           </div>
           <Button
@@ -134,7 +134,7 @@ export default function Dashboard() {
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6">
             <div>
               <h1 className="text-2xl font-bold mb-1">
-                Welcome to CodeQuest
+                Welcome to Tilper AI
               </h1>
               <p className="text-muted-foreground">
                 Learn to code with interactive challenges and an AI mentor by your side
@@ -307,7 +307,7 @@ export default function Dashboard() {
 
       <footer className="border-t mt-16 dark:bg-[#141516]">
         <div className="max-w-6xl mx-auto px-4 py-6 text-center text-xs text-muted-foreground">
-          CodeQuest - Learn to code with AI-powered mentoring
+          Tilper AI - Learn to code with AI-powered mentoring
         </div>
       </footer>
     </div>

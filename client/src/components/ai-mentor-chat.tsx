@@ -44,7 +44,7 @@ export function AIMentorChat({
     setInput("");
     setIsStreaming(true);
 
-    const systemContext = `You are CodeQuest Mentor, a friendly and encouraging AI coding tutor for teenage developers. You adapt your explanations to the student's level.${
+    const systemContext = `You are Tilper AI Mentor, a friendly and encouraging AI coding tutor for teenage developers. You adapt your explanations to the student's level.${
       challengeTitle ? `\n\nCurrent challenge: "${challengeTitle}"\n${challengeDescription || ""}` : ""
     }${userCode ? `\n\nStudent's current code:\n\`\`\`\n${userCode}\n\`\`\`` : ""}
 

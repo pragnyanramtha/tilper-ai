@@ -1,4 +1,4 @@
-# CodeQuest - Interactive Coding Platform
+# Tilper AI - Interactive Coding Platform
 
 ## Overview
 An educational technology platform for teenage developers to learn coding through interactive problem-solving with an AI mentor powered by Claude Sonnet API. Features a built-in code editor, adaptive AI mentoring, animated concept visualizations, and progress tracking.
@@ -32,7 +32,7 @@ An educational technology platform for teenage developers to learn coding throug
 - Primary/accent color: #d97757 (HSL 15 63% 60%)
 - Dark mode bg: #262624
 - Light mode bg: #f5f7f7
-- Fonts: IBM Plex Sans (UI), JetBrains Mono (code)
+- Fonts: Styrene A / Anthropic Sans Web / Space Grotesk (UI), JetBrains Mono (code)
 - Dark mode default, toggle available
 
 ## Session Management
