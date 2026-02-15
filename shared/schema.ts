@@ -19,6 +19,53 @@ export const insertUserSchema = createInsertSchema(users).pick({
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
+export const userProfiles = pgTable("user_profiles", {
+  id: serial("id").primaryKey(),
+  sessionId: text("session_id").notNull().unique(),
+  name: text("name"),
+  age: integer("age"),
+  experience: text("experience"),
+  goals: text("goals"),
+  preferredLanguage: text("preferred_language").default("javascript"),
+  memories: jsonb("memories").$type<string[]>().default([]),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertUserProfileSchema = createInsertSchema(userProfiles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type UserProfile = typeof userProfiles.$inferSelect;
+export type InsertUserProfile = z.infer<typeof insertUserProfileSchema>;
+
+export const learningPlans = pgTable("learning_plans", {
+  id: serial("id").primaryKey(),
+  sessionId: text("session_id").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  topics: jsonb("topics").$type<Array<{
+    title: string;
+    description: string;
+    difficulty: string;
+    language: string;
+    status: string;
+    challengeId?: number;
+  }>>().notNull().default([]),
+  status: text("status").notNull().default("active"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertLearningPlanSchema = createInsertSchema(learningPlans).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type LearningPlan = typeof learningPlans.$inferSelect;
+export type InsertLearningPlan = z.infer<typeof insertLearningPlanSchema>;
+
 export const challenges = pgTable("challenges", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -33,6 +80,7 @@ export const challenges = pgTable("challenges", {
   order: integer("order").notNull().default(0),
   generatedBy: text("generated_by").default("seed"),
   sessionId: text("session_id"),
+  planId: integer("plan_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

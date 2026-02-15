@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
   ResizableHandle,
@@ -14,17 +14,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import {
   BookOpen,
-  MessageSquare,
   Play,
   ArrowLeft,
   Sparkles,
 } from "lucide-react";
 import { CodeEditor } from "@/components/code-editor";
-import { AIMentorChat } from "@/components/ai-mentor-chat";
 import { AnimationViewer } from "@/components/animation-viewer";
 import { ChallengeDetail } from "@/components/challenge-panel";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { runCode, preloadPyodide } from "@/lib/code-runner";
+import { useAppContext } from "@/lib/app-context";
 import type { Challenge, UserProgress } from "@shared/schema";
 import { useIsMobile } from "@/hooks/use-mobile";
 
@@ -41,10 +40,16 @@ interface EvaluationResult {
 export default function IDEPage() {
   const [, navigate] = useLocation();
   const isMobile = useIsMobile();
+  const { setActiveChallengeId, setMode } = useAppContext();
 
   const challengeId = parseInt(
     new URLSearchParams(window.location.search).get("challenge") || "1"
   );
+
+  useEffect(() => {
+    setActiveChallengeId(challengeId);
+    setMode("build");
+  }, [challengeId]);
 
   const [code, setCode] = useState("");
   const [output, setOutput] = useState("");
@@ -222,14 +227,6 @@ export default function IDEPage() {
           <Play className="w-3.5 h-3.5 mr-1.5" />
           Visual
         </TabsTrigger>
-        <TabsTrigger
-          value="mentor"
-          className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2.5 text-xs"
-          data-testid="tab-mentor"
-        >
-          <MessageSquare className="w-3.5 h-3.5 mr-1.5" />
-          Mentor
-        </TabsTrigger>
       </TabsList>
       <TabsContent value="lesson" className="flex-1 mt-0 overflow-auto">
         <div className="p-4">
@@ -288,13 +285,6 @@ export default function IDEPage() {
           animationData={animationData}
           isLoading={isAnimationLoading}
           onRequestAnimation={handleRequestAnimation}
-        />
-      </TabsContent>
-      <TabsContent value="mentor" className="flex-1 mt-0 min-h-0">
-        <AIMentorChat
-          challengeTitle={challenge.title}
-          challengeDescription={challenge.description}
-          userCode={code}
         />
       </TabsContent>
     </Tabs>

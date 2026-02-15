@@ -16,15 +16,16 @@ import { Button } from "@/components/ui/button";
 import {
   Home,
   Code2,
-  History,
   Sparkles,
   Sun,
   Moon,
   CheckCircle2,
   Circle,
+  User,
+  BookOpen,
 } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
-import type { Challenge, UserProgress } from "@shared/schema";
+import type { Challenge, UserProgress, LearningPlan } from "@shared/schema";
 
 export function AppSidebar() {
   const [location, navigate] = useLocation();
@@ -38,6 +39,10 @@ export function AppSidebar() {
     queryKey: ["/api/progress"],
   });
 
+  const { data: plans } = useQuery<LearningPlan[]>({
+    queryKey: ["/api/plans"],
+  });
+
   const progressMap: Record<number, UserProgress> = {};
   if (progressList) {
     for (const p of progressList) {
@@ -45,7 +50,8 @@ export function AppSidebar() {
     }
   }
 
-  const recentChallenges = (challenges || []).slice(0, 8);
+  const recentChallenges = (challenges || []).slice(0, 6);
+  const activePlans = (plans || []).filter(p => p.status === "active");
 
   return (
     <Sidebar>
@@ -80,9 +86,50 @@ export function AppSidebar() {
                   </a>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={location === "/profile"}
+                  data-testid="nav-profile"
+                >
+                  <a href="/profile" onClick={(e) => { e.preventDefault(); navigate("/profile"); }}>
+                    <User className="w-4 h-4" />
+                    <span>Profile</span>
+                  </a>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {activePlans.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Learning Plans</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {activePlans.map((plan) => (
+                  <SidebarMenuItem key={plan.id}>
+                    <SidebarMenuButton
+                      asChild
+                      data-testid={`nav-plan-${plan.id}`}
+                    >
+                      <a
+                        href="/"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          navigate("/");
+                        }}
+                      >
+                        <BookOpen className="w-3.5 h-3.5 text-primary" />
+                        <span className="truncate text-xs">{plan.title}</span>
+                      </a>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         {recentChallenges.length > 0 && (
           <SidebarGroup>

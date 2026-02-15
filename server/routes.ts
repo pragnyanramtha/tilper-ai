@@ -21,6 +21,181 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
+  // ─── Profile Routes ───
+
+  app.get("/api/profile", async (req, res) => {
+    try {
+      const sessionId = getSessionId(req);
+      const profile = await storage.getProfile(sessionId);
+      res.json(profile || null);
+    } catch (error) {
+      console.error("Error fetching profile:", error);
+      res.status(500).json({ error: "Failed to fetch profile" });
+    }
+  });
+
+  const profileSchema = z.object({
+    name: z.string().max(100).optional(),
+    age: z.number().int().min(8).max(99).optional(),
+    experience: z.string().max(500).optional(),
+    goals: z.string().max(1000).optional(),
+    preferredLanguage: z.string().optional(),
+    memories: z.array(z.string().max(500)).max(50).optional(),
+  });
+
+  app.post("/api/profile", async (req, res) => {
+    try {
+      const parsed = profileSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request body" });
+      }
+      const sessionId = getSessionId(req);
+      const profile = await storage.upsertProfile(sessionId, parsed.data);
+      res.json(profile);
+    } catch (error) {
+      console.error("Error saving profile:", error);
+      res.status(500).json({ error: "Failed to save profile" });
+    }
+  });
+
+  app.post("/api/profile/memories", async (req, res) => {
+    try {
+      const schema = z.object({ memory: z.string().min(1).max(500) });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request body" });
+      }
+      const sessionId = getSessionId(req);
+      const profile = await storage.getProfile(sessionId);
+      const existing = (profile?.memories as string[]) || [];
+      const updated = [...existing, parsed.data.memory].slice(-50);
+      const result = await storage.upsertProfile(sessionId, { memories: updated });
+      res.json(result);
+    } catch (error) {
+      console.error("Error adding memory:", error);
+      res.status(500).json({ error: "Failed to add memory" });
+    }
+  });
+
+  // ─── Learning Plan Routes ───
+
+  app.get("/api/plans", async (req, res) => {
+    try {
+      const sessionId = getSessionId(req);
+      const plans = await storage.getLearningPlans(sessionId);
+      res.json(plans);
+    } catch (error) {
+      console.error("Error fetching plans:", error);
+      res.status(500).json({ error: "Failed to fetch plans" });
+    }
+  });
+
+  app.get("/api/plans/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const plan = await storage.getLearningPlan(id);
+      if (!plan) return res.status(404).json({ error: "Plan not found" });
+      res.json(plan);
+    } catch (error) {
+      console.error("Error fetching plan:", error);
+      res.status(500).json({ error: "Failed to fetch plan" });
+    }
+  });
+
+  app.post("/api/plans/generate", async (req, res) => {
+    try {
+      const schema = z.object({
+        conversationSummary: z.string().min(1).max(10000),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request body" });
+      }
+      const sessionId = getSessionId(req);
+      const profile = await storage.getProfile(sessionId);
+
+      const profileContext = profile
+        ? `Student profile: Name: ${profile.name || "Unknown"}, Age: ${profile.age || "Unknown"}, Experience: ${profile.experience || "Unknown"}, Goals: ${profile.goals || "Unknown"}, Preferred Language: ${profile.preferredLanguage || "javascript"}`
+        : "No profile info available.";
+
+      const response = await anthropic.messages.create({
+        model: "claude-sonnet-4-5",
+        max_tokens: 4096,
+        messages: [
+          {
+            role: "user",
+            content: `Based on this conversation about what a student wants to learn, generate a structured learning plan.
+
+${profileContext}
+
+Conversation summary:
+${parsed.data.conversationSummary}
+
+Return ONLY valid JSON (no markdown, no backticks):
+{
+  "title": "Plan title (e.g., 'Python Fundamentals Journey')",
+  "description": "1-2 sentence description of the plan",
+  "topics": [
+    {
+      "title": "Topic title",
+      "description": "What will be learned in this topic",
+      "difficulty": "Beginner|Intermediate|Advanced",
+      "language": "javascript|python",
+      "status": "pending"
+    }
+  ]
+}
+
+Generate 4-8 topics in a logical learning sequence. Tailor difficulty and language to the student's profile and conversation.`,
+          },
+        ],
+      });
+
+      const text = response.content[0].type === "text" ? response.content[0].text : "";
+      let planData;
+      try {
+        const cleaned = text.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
+        planData = JSON.parse(cleaned);
+      } catch {
+        return res.status(500).json({ error: "Failed to parse AI response" });
+      }
+
+      const plan = await storage.createLearningPlan({
+        sessionId,
+        title: planData.title,
+        description: planData.description,
+        topics: planData.topics || [],
+        status: "active",
+      });
+
+      res.json(plan);
+    } catch (error) {
+      console.error("Error generating plan:", error);
+      res.status(500).json({ error: "Failed to generate plan" });
+    }
+  });
+
+  app.patch("/api/plans/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const schema = z.object({
+        topics: z.array(z.any()).optional(),
+        status: z.string().optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request body" });
+      }
+      const plan = await storage.updateLearningPlan(id, parsed.data);
+      res.json(plan);
+    } catch (error) {
+      console.error("Error updating plan:", error);
+      res.status(500).json({ error: "Failed to update plan" });
+    }
+  });
+
+  // ─── Challenge Routes ───
+
   app.get("/api/challenges", async (req, res) => {
     try {
       const sessionId = getSessionId(req);
@@ -46,36 +221,11 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/progress", async (req, res) => {
-    try {
-      const sessionId = getSessionId(req);
-      const progress = await storage.getProgress(sessionId);
-      res.json(progress);
-    } catch (error) {
-      console.error("Error fetching progress:", error);
-      res.status(500).json({ error: "Failed to fetch progress" });
-    }
-  });
-
-  app.get("/api/progress/:challengeId", async (req, res) => {
-    try {
-      const sessionId = getSessionId(req);
-      const challengeId = parseInt(req.params.challengeId);
-      const progress = await storage.getProgressForChallenge(sessionId, challengeId);
-      if (!progress) {
-        return res.json(null);
-      }
-      res.json(progress);
-    } catch (error) {
-      console.error("Error fetching progress:", error);
-      res.status(500).json({ error: "Failed to fetch progress" });
-    }
-  });
-
   const generateSchema = z.object({
     topic: z.string().min(1).max(200),
     difficulty: z.enum(["Beginner", "Intermediate", "Advanced"]),
     language: z.enum(["javascript", "python"]),
+    planId: z.number().int().optional(),
   });
 
   app.post("/api/challenges/generate", async (req, res) => {
@@ -84,10 +234,14 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid request body" });
       }
-      const { topic, difficulty, language } = parsed.data;
+      const { topic, difficulty, language, planId } = parsed.data;
       const sessionId = getSessionId(req);
+      const profile = await storage.getProfile(sessionId);
 
       const langName = language === "python" ? "Python" : "JavaScript";
+      const profileHint = profile?.name
+        ? `The student's name is ${profile.name}${profile.experience ? `, experience level: ${profile.experience}` : ""}.`
+        : "";
 
       const response = await anthropic.messages.create({
         model: "claude-sonnet-4-5",
@@ -96,6 +250,7 @@ export async function registerRoutes(
           {
             role: "user",
             content: `Generate a coding challenge for a teenage developer learning ${langName}.
+${profileHint}
 
 Topic: ${topic}
 Difficulty: ${difficulty}
@@ -149,12 +304,41 @@ Rules:
         order: 0,
         generatedBy: "ai",
         sessionId,
+        planId: planId || null,
       });
 
       res.json(challenge);
     } catch (error) {
       console.error("Error generating challenge:", error);
       res.status(500).json({ error: "Failed to generate challenge" });
+    }
+  });
+
+  // ─── Progress Routes ───
+
+  app.get("/api/progress", async (req, res) => {
+    try {
+      const sessionId = getSessionId(req);
+      const progress = await storage.getProgress(sessionId);
+      res.json(progress);
+    } catch (error) {
+      console.error("Error fetching progress:", error);
+      res.status(500).json({ error: "Failed to fetch progress" });
+    }
+  });
+
+  app.get("/api/progress/:challengeId", async (req, res) => {
+    try {
+      const sessionId = getSessionId(req);
+      const challengeId = parseInt(req.params.challengeId);
+      const progress = await storage.getProgressForChallenge(sessionId, challengeId);
+      if (!progress) {
+        return res.json(null);
+      }
+      res.json(progress);
+    } catch (error) {
+      console.error("Error fetching progress:", error);
+      res.status(500).json({ error: "Failed to fetch progress" });
     }
   });
 
@@ -179,6 +363,8 @@ Rules:
       res.status(500).json({ error: "Failed to save progress" });
     }
   });
+
+  // ─── Evaluation Route ───
 
   const evaluateSchema = z.object({
     code: z.string().min(1).max(50000),
@@ -276,6 +462,8 @@ Return JSON: {"qualityScore": number, "feedback": "2-3 sentence feedback for a t
     }
   });
 
+  // ─── Chat Route (enhanced with profile context) ───
+
   const chatSchema = z.object({
     messages: z.array(z.object({
       role: z.enum(["user", "assistant"]),
@@ -292,6 +480,25 @@ Return JSON: {"qualityScore": number, "feedback": "2-3 sentence feedback for a t
       }
       const { messages, systemPrompt } = parsed.data;
 
+      const sessionId = getSessionId(req);
+      const profile = await storage.getProfile(sessionId);
+
+      let enrichedPrompt = systemPrompt;
+      if (profile) {
+        const profileInfo = [
+          profile.name ? `Student name: ${profile.name}` : null,
+          profile.age ? `Age: ${profile.age}` : null,
+          profile.experience ? `Experience: ${profile.experience}` : null,
+          profile.goals ? `Goals: ${profile.goals}` : null,
+          profile.preferredLanguage ? `Preferred language: ${profile.preferredLanguage}` : null,
+          (profile.memories as string[])?.length > 0 ? `Things to remember about this student: ${(profile.memories as string[]).join("; ")}` : null,
+        ].filter(Boolean).join("\n");
+
+        if (profileInfo) {
+          enrichedPrompt = `${systemPrompt}\n\nStudent Profile:\n${profileInfo}`;
+        }
+      }
+
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
@@ -299,7 +506,7 @@ Return JSON: {"qualityScore": number, "feedback": "2-3 sentence feedback for a t
       const stream = anthropic.messages.stream({
         model: "claude-sonnet-4-5",
         max_tokens: 8192,
-        system: systemPrompt,
+        system: enrichedPrompt,
         messages: messages,
       });
 
@@ -324,6 +531,8 @@ Return JSON: {"qualityScore": number, "feedback": "2-3 sentence feedback for a t
       }
     }
   });
+
+  // ─── Animation Route ───
 
   const animationSchema = z.object({
     topic: z.string().min(1).max(200),
