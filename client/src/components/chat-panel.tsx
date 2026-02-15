@@ -11,7 +11,7 @@ import { useAppContext } from "@/lib/app-context";
 import type { UserProfile, Challenge } from "@shared/schema";
 
 export function ChatPanel() {
-  const { mode, chatMessages, setChatMessages, activeChallengeId, activeConversationId, setActiveConversationId } = useAppContext();
+  const { mode, chatMessages, setChatMessages, activeChallengeId, activeConversationId, setActiveConversationId, sessionId } = useAppContext();
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [thinking, setThinking] = useState<string | null>(null);
@@ -62,7 +62,6 @@ export function ChatPanel() {
     let currentConvId = activeConversationId;
 
     try {
-      const sessionId = localStorage.getItem("codequest-session-id") || "demo-session";
 
       // If no active conversation, create one
       if (!currentConvId) {

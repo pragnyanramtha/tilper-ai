@@ -162,9 +162,37 @@ export async function seedDatabase(storage: IStorage) {
   console.log("Seeding database with challenges...");
   for (const challenge of seedChallenges) {
     await storage.createChallenge({
-      ...challenge,
+      title: challenge.title,
+      description: challenge.description,
+      difficulty: challenge.difficulty,
+      topic: challenge.topic,
+      starterCode: challenge.starterCode,
+      solution: challenge.solution,
+      hints: challenge.hints as any, // Cast to any to bypass text[].array() mismatch if needed
       testCases: JSON.parse(challenge.testCases),
-    });
+      order: challenge.order,
+      language: "javascript",
+      generatedBy: "seed",
+      sessionId: null,
+      planId: null,
+    } as any);
   }
   console.log(`Seeded ${seedChallenges.length} challenges`);
+
+  // Seed a dummy conversation if none exist for a "demo-session"
+  const demoSessionId = "demo-session";
+  const existingConversations = await storage.getConversations(demoSessionId);
+  if (existingConversations.length === 0) {
+    console.log("Seeding dummy conversation...");
+    const conversation = await storage.createConversation({
+      sessionId: demoSessionId,
+      title: "Welcome to Tilper AI!",
+    } as any);
+    await storage.createMessage({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: "Hello! I'm your Tilper AI mentor. I can help you learn to code with personalized challenges, visual explanations, and interactive guidance. What would you like to explore today?",
+    } as any);
+    console.log("Seeded dummy conversation.");
+  }
 }

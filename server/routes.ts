@@ -257,20 +257,20 @@ async function handleToolCall(
       }
 
       const challenge = await storage.createChallenge({
-        title: challengeData.title,
-        description: challengeData.description,
-        difficulty,
-        topic,
-        language,
-        starterCode: challengeData.starterCode,
-        solution: challengeData.solution,
-        hints: challengeData.hints || [],
-        testCases: challengeData.testCases || [],
-        order: 0,
-        generatedBy: "ai",
-        sessionId,
-        planId: null,
-      });
+        title: challengeData.title as any,
+        description: challengeData.description as any,
+        difficulty: difficulty as any,
+        topic: topic as any,
+        language: language as any,
+        starterCode: challengeData.starterCode as any,
+        solution: challengeData.solution as any,
+        hints: (challengeData.hints || []) as any,
+        testCases: (challengeData.testCases || []) as any,
+        order: 0 as any,
+        generatedBy: "ai" as any,
+        sessionId: sessionId as any,
+        planId: null as any,
+      } as any);
 
       return {
         result: `Challenge created: "${challenge.title}" (${difficulty}, ${language === "python" ? "Python" : "JavaScript"}). The student can open it in the IDE. Tell them about it enthusiastically and include link: [Open Challenge](/ide?challenge=${challenge.id})`,
@@ -288,12 +288,12 @@ async function handleToolCall(
       }));
 
       const plan = await storage.createLearningPlan({
-        sessionId,
-        title,
-        description,
-        topics: formattedTopics,
-        status: "active",
-      });
+        sessionId: sessionId as any,
+        title: title as any,
+        description: description as any,
+        topics: formattedTopics as any,
+        status: "active" as any,
+      } as any);
 
       const topicList = formattedTopics
         .map((t: any, i: number) => `${i + 1}. **${t.title}** — ${t.description}`)
@@ -308,7 +308,7 @@ async function handleToolCall(
       const profile = await storage.getProfile(sessionId);
       const existing = (profile?.memories as string[]) || [];
       const updated = [...existing, toolInput.memory].slice(-50);
-      await storage.upsertProfile(sessionId, { memories: updated });
+      await storage.upsertProfile(sessionId as any, { memories: updated } as any);
       return { result: `Noted: "${toolInput.memory}". Continue the conversation naturally — don't tell the student you saved a memory.` };
     }
     default:
@@ -349,7 +349,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid request body" });
       }
       const sessionId = getSessionId(req);
-      const profile = await storage.upsertProfile(sessionId, parsed.data);
+      const profile = await storage.upsertProfile(sessionId as any, parsed.data as any);
       res.json(profile);
     } catch (error) {
       console.error("Error saving profile:", error);
@@ -368,9 +368,9 @@ export async function registerRoutes(
       const profile = await storage.getProfile(sessionId);
       const existing = (profile?.memories as string[]) || [];
       const updated = [...existing, parsed.data.memory].slice(-50);
-      const result = await storage.upsertProfile(sessionId, {
+      const result = await storage.upsertProfile(sessionId as any, {
         memories: updated,
-      });
+      } as any);
       res.json(result);
     } catch (error) {
       console.error("Error adding memory:", error);
@@ -449,7 +449,7 @@ export async function registerRoutes(
         description: planData.description,
         topics: planData.topics || [],
         status: "active",
-      });
+      } as any);
 
       res.json(plan);
     } catch (error) {
@@ -469,7 +469,7 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid request body" });
       }
-      const plan = await storage.updateLearningPlan(id, parsed.data);
+      const plan = await storage.updateLearningPlan(id, parsed.data as any);
       res.json(plan);
     } catch (error) {
       console.error("Error updating plan:", error);
@@ -739,9 +739,9 @@ export async function registerRoutes(
     const sessionId = req.headers["x-session-id"] as string;
     if (!sessionId) return res.status(400).json({ message: "Session ID required" });
     const conv = await storage.createConversation({
-      sessionId,
-      title: req.body.title || "New Chat",
-    });
+      sessionId: sessionId as any,
+      title: (req.body.title || "New Chat") as any,
+    } as any);
     res.json(conv);
   });
 
@@ -763,10 +763,10 @@ export async function registerRoutes(
         const lastUserMessage = messages[messages.length - 1];
         if (lastUserMessage.role === "user") {
           await storage.createMessage({
-            conversationId,
-            role: "user",
-            content: lastUserMessage.content,
-          });
+            conversationId: conversationId as any,
+            role: "user" as any,
+            content: lastUserMessage.content as any,
+          } as any);
         }
       }
 
@@ -793,6 +793,7 @@ export async function registerRoutes(
       const MAX_TOOL_ROUNDS = 5;
       let round = 0;
 
+      let assistantFinalContent = "";
       while (round < MAX_TOOL_ROUNDS) {
         round++;
         const response = await anthropic.messages.create({
@@ -808,6 +809,7 @@ export async function registerRoutes(
 
         for (const block of response.content) {
           if (block.type === "text" && block.text) {
+            assistantFinalContent += block.text;
             const chunks = block.text.split(/(?<=\n)/g).flatMap(line => {
               if (line.length <= 200) return [line];
               return line.match(/.{1,200}/g) || [line];
@@ -859,6 +861,15 @@ export async function registerRoutes(
           { role: "assistant", content: response.content },
           { role: "user", content: toolResults },
         ];
+      }
+
+      // Save assistant response if conversation exists
+      if (conversationId && assistantFinalContent.trim()) {
+        await storage.createMessage({
+          conversationId: conversationId as any,
+          role: "assistant" as any,
+          content: assistantFinalContent as any,
+        } as any);
       }
 
       res.write(`data: ${JSON.stringify({ done: true })}\n\n`);

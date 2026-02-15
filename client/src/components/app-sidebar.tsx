@@ -36,7 +36,8 @@ export function AppSidebar() {
     setIsInChat,
     setMode,
     activeConversationId,
-    setActiveConversationId
+    setActiveConversationId,
+    sessionId,
   } = useAppContext();
 
   const { data: challenges } = useQuery<Challenge[]>({
@@ -54,7 +55,6 @@ export function AppSidebar() {
   const { data: conversations } = useQuery<Conversation[]>({
     queryKey: ["/api/conversations"],
     queryFn: async () => {
-      const sessionId = localStorage.getItem("codequest-session-id") || "demo-session";
       const res = await fetch("/api/conversations", {
         headers: { "x-session-id": sessionId }
       });

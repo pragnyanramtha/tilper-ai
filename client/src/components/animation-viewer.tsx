@@ -98,7 +98,7 @@ function drawTree(ctx: CanvasRenderingContext2D, w: number, h: number, progress:
     { x: w / 2 + w * 0.27, y: h * 0.62 },
   ];
 
-  const edges = [[0,1],[0,2],[1,3],[1,4],[2,5],[2,6]];
+  const edges = [[0, 1], [0, 2], [1, 3], [1, 4], [2, 5], [2, 6]];
   const showCount = Math.floor(progress * values.length) + 1;
 
   for (const [from, to] of edges) {
@@ -748,7 +748,7 @@ function drawGraph(ctx: CanvasRenderingContext2D, w: number, h: number, progress
     { label: "D", x: w * 0.5, y: h * 0.65 },
     { label: "E", x: w * 0.25, y: h * 0.55 },
   ];
-  const edges = [[0,1],[0,4],[1,2],[2,3],[3,4],[1,3]];
+  const edges = [[0, 1], [0, 4], [1, 2], [2, 3], [3, 4], [1, 3]];
   const showCount = Math.floor(progress * nodes.length) + 1;
 
   for (const [from, to] of edges) {
@@ -883,25 +883,32 @@ function ManimCanvas({ steps, isPlaying, onStepChange }: { steps: AnimationStep[
       const startTime = currentTime;
       const transitionIn = index === 0 ? 0 : TRANSITION_DURATION;
       const holdTime = step.duration;
-      const transitionOut = index === steps.length - 1 ? 0 : TRANSITION_DURATION;
-      const endTime = startTime + transitionIn + holdTime;
-      
+      const transitionInEnd = startTime + transitionIn;
+      const holdEnd = transitionInEnd + holdTime;
+      const endTime = holdEnd; // The next step starts immediately after this hold
+
+      // The total time assigned to this step is its hold + transition in
+      // but Step i's transition in IS effectively Step i-1's transition out.
       currentTime = endTime;
-      
+
       return {
         startTime,
-        transitionInEnd: startTime + transitionIn,
-        holdEnd: startTime + transitionIn + holdTime,
+        transitionIn,
+        transitionInEnd,
+        holdEnd,
         endTime,
         step
       };
     });
-    
+
     return {
       stepTimings,
-      totalDuration: currentTime
+      totalDuration: currentTime,
+      transitionDuration: TRANSITION_DURATION
     };
   }, [steps]);
+
+  const lastNotifiedStepRef = useRef(0);
 
   const drawFrame = useCallback((globalProgress: number) => {
     const canvas = canvasRef.current;
@@ -923,69 +930,69 @@ function ManimCanvas({ steps, isPlaying, onStepChange }: { steps: AnimationStep[
     ctx.fillRect(0, 0, w, h);
 
     const currentTime = globalProgress * timeline.totalDuration;
-    
-    // Find current and next steps
-    let currentStepIndex = 0;
-    let nextStepIndex = -1;
-    let blendFactor = 0;
 
+    // Find current active step
+    let activeStepIdx = 0;
     for (let i = 0; i < timeline.stepTimings.length; i++) {
-      const timing = timeline.stepTimings[i];
-      
-      if (currentTime >= timing.startTime && currentTime < timing.endTime) {
-        currentStepIndex = i;
-        
-        // Check if we're in transition to next step
-        if (currentTime >= timing.holdEnd && i < timeline.stepTimings.length - 1) {
-          nextStepIndex = i + 1;
-          const transitionProgress = (currentTime - timing.holdEnd) / 0.8;
-          blendFactor = ease(transitionProgress);
-        }
+      if (currentTime < timeline.stepTimings[i].endTime) {
+        activeStepIdx = i;
         break;
+      }
+      if (i === timeline.stepTimings.length - 1) {
+        activeStepIdx = i;
       }
     }
 
-    // Update current step for progress dots
-    if (currentStepIndex !== currentStep) {
-      setCurrentStep(currentStepIndex);
+    // Update current step for progress dots and parent notification
+    if (activeStepIdx !== lastNotifiedStepRef.current) {
+      lastNotifiedStepRef.current = activeStepIdx;
+      setCurrentStep(activeStepIdx);
     }
 
-    // Draw current step (fading out if transitioning)
-    const currentTiming = timeline.stepTimings[currentStepIndex];
-    const stepProgress = Math.min(
-      (currentTime - currentTiming.transitionInEnd) / currentTiming.step.duration,
-      1
-    );
-    
-    if (nextStepIndex >= 0) {
+    const timing = timeline.stepTimings[activeStepIdx];
+
+    if (currentTime < timing.transitionInEnd && activeStepIdx > 0) {
+      // Transition phase: blend from previous step to current
+      const prevTiming = timeline.stepTimings[activeStepIdx - 1];
+      const transitionProgress = (currentTime - timing.startTime) / timeline.transitionDuration;
+      const blendFactor = ease(Math.min(1, Math.max(0, transitionProgress)));
+
+      // Draw previous step fading out
       ctx.globalAlpha = 1 - blendFactor;
-    } else {
-      ctx.globalAlpha = 1;
-    }
-    
-    drawStepContent(ctx, currentTiming.step, w, h, Math.max(0, stepProgress), isDark);
+      drawStepContent(ctx, prevTiming.step, w, h, 1, isDark);
 
-    // Draw next step (fading in if transitioning)
-    if (nextStepIndex >= 0) {
+      // Draw current step fading in
       ctx.globalAlpha = blendFactor;
-      drawStepContent(ctx, timeline.stepTimings[nextStepIndex].step, w, h, 0, isDark);
+      drawStepContent(ctx, timing.step, w, h, 0, isDark);
+    } else {
+      // Hold phase: draw current step at full opacity with its own progress
+      const holdProgress = timing.step.duration === 0
+        ? 1
+        : (currentTime - timing.transitionInEnd) / timing.step.duration;
+
+      ctx.globalAlpha = 1;
+      drawStepContent(ctx, timing.step, w, h, Math.min(1, Math.max(0, holdProgress)), isDark);
     }
 
     // Draw progress dots
     ctx.globalAlpha = 1;
+    const dotSpacing = 12;
+    const totalDotsW = (steps.length - 1) * dotSpacing;
+    const startX = w / 2 - totalDotsW / 2;
+    const dotY = h - 20;
+
     for (let i = 0; i < steps.length; i++) {
-      const dotX = w / 2 - (steps.length * 12) / 2 + i * 12 + 4;
-      const dotY = h - 16;
+      const dotX = startX + i * dotSpacing;
       ctx.beginPath();
       ctx.arc(dotX, dotY, 3, 0, Math.PI * 2);
-      ctx.fillStyle = i === currentStepIndex
+      ctx.fillStyle = i === activeStepIdx
         ? ACCENT
-        : i < currentStepIndex
-          ? (isDark ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.2)")
-          : (isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)");
+        : i < activeStepIdx
+          ? (isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.3)")
+          : (isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)");
       ctx.fill();
     }
-  }, [steps, timeline, currentStep]);
+  }, [steps, timeline]); // Stable dependencies: removed currentStep
 
   const drawStepContent = useCallback((
     ctx: CanvasRenderingContext2D,

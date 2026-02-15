@@ -55,23 +55,20 @@ export interface IStorage {
 
 export class DatabaseStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
+    return (await db.select().from(users).where(eq(users.id, id as any) as any))[0];
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
-    return user;
+    return (await db.select().from(users).where(eq(users.username, username as any) as any))[0];
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db.insert(users).values(insertUser).returning();
+    const [user] = await db.insert(users).values(insertUser as any).returning();
     return user;
   }
 
   async getProfile(sessionId: string): Promise<UserProfile | undefined> {
-    const [profile] = await db.select().from(userProfiles).where(eq(userProfiles.sessionId, sessionId));
-    return profile;
+    return (await db.select().from(userProfiles).where(eq(userProfiles.sessionId, sessionId as any) as any))[0];
   }
 
   async upsertProfile(sessionId: string, data: Partial<InsertUserProfile>): Promise<UserProfile> {
@@ -82,8 +79,8 @@ export class DatabaseStorage implements IStorage {
         .set({
           ...data,
           updatedAt: new Date(),
-        })
-        .where(eq(userProfiles.id, existing.id))
+        } as any)
+        .where(eq(userProfiles.id, existing.id as any) as any)
         .returning();
       return updated;
     }
@@ -92,66 +89,63 @@ export class DatabaseStorage implements IStorage {
       .values({
         sessionId,
         ...data,
-      })
+      } as any)
       .returning();
     return created;
   }
 
   async getLearningPlans(sessionId: string): Promise<LearningPlan[]> {
-    return db.select().from(learningPlans).where(eq(learningPlans.sessionId, sessionId)).orderBy(desc(learningPlans.createdAt));
+    return db.select().from(learningPlans).where(eq(learningPlans.sessionId, sessionId as any) as any).orderBy(desc(learningPlans.createdAt) as any) as any;
   }
 
   async getLearningPlan(id: number): Promise<LearningPlan | undefined> {
-    const [plan] = await db.select().from(learningPlans).where(eq(learningPlans.id, id));
-    return plan;
+    return (await db.select().from(learningPlans).where(eq(learningPlans.id, id as any) as any))[0];
   }
 
   async createLearningPlan(plan: InsertLearningPlan): Promise<LearningPlan> {
-    const [created] = await db.insert(learningPlans).values(plan).returning();
+    const [created] = await db.insert(learningPlans).values(plan as any).returning();
     return created;
   }
 
   async updateLearningPlan(id: number, data: Partial<InsertLearningPlan>): Promise<LearningPlan> {
     const [updated] = await db
       .update(learningPlans)
-      .set(data)
-      .where(eq(learningPlans.id, id))
+      .set(data as any)
+      .where(eq(learningPlans.id, id as any) as any)
       .returning();
     return updated;
   }
 
   async getChallenges(): Promise<Challenge[]> {
-    return db.select().from(challenges).orderBy(desc(challenges.createdAt));
+    return db.select().from(challenges).orderBy(desc(challenges.createdAt) as any) as any;
   }
 
   async getChallengesBySession(sessionId: string): Promise<Challenge[]> {
     return db
       .select()
       .from(challenges)
-      .where(or(eq(challenges.sessionId, sessionId), isNull(challenges.sessionId)))
-      .orderBy(desc(challenges.createdAt));
+      .where(or(eq(challenges.sessionId, sessionId as any), isNull(challenges.sessionId)) as any)
+      .orderBy(desc(challenges.createdAt) as any) as any;
   }
 
   async getChallenge(id: number): Promise<Challenge | undefined> {
-    const [challenge] = await db.select().from(challenges).where(eq(challenges.id, id));
-    return challenge;
+    return (await db.select().from(challenges).where(eq(challenges.id, id as any) as any))[0];
   }
 
   async createChallenge(challenge: InsertChallenge): Promise<Challenge> {
-    const [created] = await db.insert(challenges).values(challenge).returning();
+    const [created] = await db.insert(challenges).values(challenge as any).returning();
     return created;
   }
 
-  async getProgress(sessionId: string): Promise<UserProgress[]>;
   async getProgress(sessionId: string): Promise<UserProgress[]> {
-    return db.select().from(userProgress).where(eq(userProgress.sessionId, sessionId));
+    return db.select().from(userProgress).where(eq(userProgress.sessionId, sessionId as any) as any) as any;
   }
 
   async getProgressForChallenge(sessionId: string, challengeId: number): Promise<UserProgress | undefined> {
     const [progress] = await db
       .select()
       .from(userProgress)
-      .where(and(eq(userProgress.sessionId, sessionId), eq(userProgress.challengeId, challengeId)));
+      .where(and(eq(userProgress.sessionId, sessionId as any), eq(userProgress.challengeId, challengeId as any)) as any);
     return progress;
   }
 
@@ -166,8 +160,8 @@ export class DatabaseStorage implements IStorage {
           score: score ?? existing.score,
           aiFeedback: aiFeedback ?? existing.aiFeedback,
           completedAt: status === "completed" ? new Date() : existing.completedAt,
-        })
-        .where(eq(userProgress.id, existing.id))
+        } as any)
+        .where(eq(userProgress.id, existing.id as any) as any)
         .returning();
       return updated;
     }
@@ -180,31 +174,30 @@ export class DatabaseStorage implements IStorage {
         userCode,
         score,
         aiFeedback,
-      })
+      } as any)
       .returning();
     return created;
   }
 
   async getConversations(sessionId: string): Promise<Conversation[]> {
-    return db.select().from(conversations).where(eq(conversations.sessionId, sessionId)).orderBy(desc(conversations.createdAt));
+    return db.select().from(conversations).where(eq(conversations.sessionId, sessionId as any) as any).orderBy(desc(conversations.createdAt) as any) as any;
   }
 
   async getConversation(id: number): Promise<Conversation | undefined> {
-    const [conversation] = await db.select().from(conversations).where(eq(conversations.id, id));
-    return conversation;
+    return (await db.select().from(conversations).where(eq(conversations.id, id as any) as any))[0];
   }
 
   async createConversation(conversation: InsertConversation): Promise<Conversation> {
-    const [created] = await db.insert(conversations).values(conversation).returning();
+    const [created] = await db.insert(conversations).values(conversation as any).returning();
     return created;
   }
 
   async getMessages(conversationId: number): Promise<Message[]> {
-    return db.select().from(messages).where(eq(messages.conversationId, conversationId)).orderBy(asc(messages.createdAt));
+    return db.select().from(messages).where(eq(messages.conversationId, conversationId as any) as any).orderBy(asc(messages.createdAt) as any) as any;
   }
 
   async createMessage(message: InsertMessage): Promise<Message> {
-    const [created] = await db.insert(messages).values(message).returning();
+    const [created] = await db.insert(messages).values(message as any).returning();
     return created;
   }
 }
@@ -240,7 +233,11 @@ export class MemStorage implements IStorage {
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = Math.random().toString(36).substring(2, 11);
-    const user: User = { ...insertUser, id };
+    const user: User = {
+      username: insertUser.username as any,
+      password: insertUser.password as any,
+      id
+    } as any;
     this.users.set(id, user);
     return user;
   }
@@ -264,12 +261,12 @@ export class MemStorage implements IStorage {
     const created: UserProfile = {
       id,
       sessionId,
-      name: data.name ?? null,
-      age: data.age ?? null,
-      experience: data.experience ?? null,
-      goals: data.goals ?? null,
-      preferredLanguage: data.preferredLanguage ?? "javascript",
-      memories: data.memories ?? [],
+      name: (data.name as any) ?? null,
+      age: (data.age as any) ?? null,
+      experience: (data.experience as any) ?? null,
+      goals: (data.goals as any) ?? null,
+      preferredLanguage: (data.preferredLanguage as any) ?? "javascript",
+      memories: (data.memories as any) ?? [],
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -291,12 +288,13 @@ export class MemStorage implements IStorage {
     const id = this.currentIds.learningPlans++;
     const created: LearningPlan = {
       id,
-      ...plan,
-      description: plan.description ?? null,
-      topics: plan.topics ?? [],
-      status: plan.status ?? "active",
+      sessionId: plan.sessionId as any,
+      title: plan.title as any,
+      description: (plan.description as any) ?? null,
+      topics: (plan.topics as any) ?? [],
+      status: (plan.status as any) ?? "active",
       createdAt: new Date(),
-    };
+    } as any;
     this.learningPlans.set(id, created);
     return created;
   }
@@ -327,14 +325,21 @@ export class MemStorage implements IStorage {
     const id = this.currentIds.challenges++;
     const created: Challenge = {
       id,
-      ...challenge,
-      language: challenge.language ?? "javascript",
-      order: challenge.order ?? 0,
-      generatedBy: challenge.generatedBy ?? "seed",
-      sessionId: challenge.sessionId ?? null,
-      planId: challenge.planId ?? null,
+      title: challenge.title as any,
+      description: challenge.description as any,
+      difficulty: challenge.difficulty as any,
+      topic: challenge.topic as any,
+      starterCode: challenge.starterCode as any,
+      solution: challenge.solution as any,
+      hints: (challenge.hints as any) ?? [],
+      testCases: (challenge.testCases as any) ?? [],
+      language: (challenge.language as any) ?? "javascript",
+      order: (challenge.order as any) ?? 0,
+      generatedBy: (challenge.generatedBy as any) ?? "seed",
+      sessionId: (challenge.sessionId as any) ?? null,
+      planId: (challenge.planId as any) ?? null,
       createdAt: new Date(),
-    };
+    } as any;
     this.challenges.set(id, created);
     return created;
   }
@@ -352,28 +357,28 @@ export class MemStorage implements IStorage {
   async upsertProgress(sessionId: string, challengeId: number, status: string, userCode?: string, score?: number, aiFeedback?: string): Promise<UserProgress> {
     const existing = await this.getProgressForChallenge(sessionId, challengeId);
     if (existing) {
-      const updated = {
+      const updated: UserProgress = {
         ...existing,
-        status,
-        userCode: userCode ?? existing.userCode,
-        score: score ?? existing.score,
-        aiFeedback: aiFeedback ?? existing.aiFeedback,
+        status: status as any,
+        userCode: (userCode as any) ?? existing.userCode,
+        score: (score as any) ?? existing.score,
+        aiFeedback: (aiFeedback as any) ?? existing.aiFeedback,
         completedAt: status === "completed" ? new Date() : existing.completedAt,
-      };
+      } as any;
       this.userProgress.set(existing.id, updated);
       return updated;
     }
     const id = this.currentIds.userProgress++;
     const created: UserProgress = {
       id,
-      sessionId,
-      challengeId,
-      status,
-      userCode: userCode ?? null,
-      score: score ?? null,
-      aiFeedback: aiFeedback ?? null,
+      sessionId: sessionId as any,
+      challengeId: challengeId as any,
+      status: status as any,
+      userCode: (userCode as any) ?? null,
+      score: (score as any) ?? null,
+      aiFeedback: (aiFeedback as any) ?? null,
       completedAt: status === "completed" ? new Date() : null,
-    };
+    } as any;
     this.userProgress.set(id, created);
     return created;
   }
@@ -392,10 +397,10 @@ export class MemStorage implements IStorage {
     const id = this.currentIds.conversations++;
     const created: Conversation = {
       id,
-      sessionId: conversation.sessionId,
-      title: conversation.title,
+      sessionId: conversation.sessionId as any,
+      title: conversation.title as any,
       createdAt: new Date(),
-    };
+    } as any;
     this.conversations.set(id, created);
     return created;
   }
@@ -410,9 +415,11 @@ export class MemStorage implements IStorage {
     const id = this.currentIds.messages++;
     const created: Message = {
       id,
-      ...message,
+      conversationId: message.conversationId as any,
+      role: message.role as any,
+      content: message.content as any,
       createdAt: new Date(),
-    };
+    } as any;
     this.messages.set(id, created);
     return created;
   }

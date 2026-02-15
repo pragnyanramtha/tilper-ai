@@ -20,6 +20,7 @@ interface AppContextValue {
   setActiveConversationId: (id: number | null) => void;
   isInChat: boolean;
   setIsInChat: (v: boolean) => void;
+  sessionId: string;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -31,6 +32,14 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
   const [activeChallengeId, setActiveChallengeId] = useState<number | null>(null);
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
   const [isInChat, setIsInChat] = useState(false);
+  const [sessionId] = useState(() => {
+    let id = localStorage.getItem("codequest-session-id");
+    if (!id) {
+      id = Math.random().toString(36).substring(2, 11);
+      localStorage.setItem("codequest-session-id", id);
+    }
+    return id;
+  });
 
   return (
     <AppContext.Provider
@@ -47,6 +56,7 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
         setActiveConversationId,
         isInChat,
         setIsInChat,
+        sessionId,
       }}
     >
       {children}
