@@ -1,4 +1,4 @@
-# Tilper AI 🚀
+# Tilper AI
 
 > An interactive coding education platform for teenage developers, powered by Claude AI
 
@@ -10,42 +10,42 @@ Tilper AI is a modern, AI-powered learning platform that helps teenagers learn p
 
 ## ✨ Features
 
-### 🤖 AI-Powered Learning
+### AI-Powered Learning
 - **Intelligent Mentor**: Claude Sonnet 4.5 provides personalized guidance and explanations
 - **Agentic Tools**: AI can search the web, generate challenges, create learning plans, and remember student details
 - **Adaptive Difficulty**: Challenges adjust to student skill level
 - **Real-time Feedback**: AI evaluates code submissions with detailed feedback
 
-### 📚 Learning Modes
+### Learning Modes
 - **Plan Mode**: AI learns about you and creates personalized learning roadmaps
 - **Learn Mode**: Interactive coding lessons with AI assistance
 - **IDE Mode**: Full-featured coding environment with split-pane layout
 
-### 🎨 Visual Learning
+### Visual Learning
 - **Manim-Inspired Animations**: 3Blue1Brown-style educational visualizations
 - **12+ Diagram Types**: Trees, stacks, queues, graphs, sorting algorithms, and more
 - **Smooth Transitions**: Professional crossfade animations between concepts
 - **Interactive Playback**: Play, pause, step forward/back through animations
 
-### 💻 Code Execution
+### Code Execution
 - **Browser-Based**: No server-side execution needed
 - **JavaScript Support**: Run JS code instantly with Function constructor
 - **Python Support**: Execute Python via Pyodide WebAssembly
 - **Safe Sandbox**: All code runs client-side in isolated environment
 
-### 🎯 Challenge System
+### Challenge System
 - **Dynamic Generation**: AI creates custom coding challenges on any topic
 - **Multiple Languages**: JavaScript and Python support
 - **Test Cases**: Automated testing with detailed results
 - **Progress Tracking**: Save your work and track completion
 
-### 👤 Personalization
+### Personalization
 - **User Profiles**: Name, age, experience level, goals
 - **AI Memories**: System remembers your learning style and preferences
 - **Learning Plans**: Structured roadmaps with 4-8 progressive topics
 - **Session-Based**: No authentication required for MVP
 
-### 🎨 Modern UI/UX
+### Modern UI/UX
 - **Claude.ai-Style Interface**: Clean, chat-first design
 - **Dark Mode**: Beautiful dark theme by default
 - **Responsive**: Works on desktop and tablet
