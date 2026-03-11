@@ -745,6 +745,28 @@ export async function registerRoutes(
         feedbackText
       );
 
+      if (allPassed && challenge.planId) {
+        const plan = await storage.getLearningPlan(challenge.planId);
+        if (plan && plan.topics) {
+          let updated = false;
+          const newTopics = (plan.topics as any[]).map(t => {
+            if (t.title === challenge.topic && t.status !== "completed") {
+              updated = true;
+              return { ...t, status: "completed" };
+            }
+            return t;
+          });
+
+          if (updated) {
+            const allTopicsCompleted = newTopics.every(t => t.status === "completed");
+            await storage.updateLearningPlan(challenge.planId, {
+              topics: newTopics,
+              status: allTopicsCompleted ? "completed" : plan.status
+            });
+          }
+        }
+      }
+
       res.json({
         score: totalScore,
         testScore,
@@ -1011,8 +1033,7 @@ export async function registerRoutes(
         console.error("Failed to parse AI animation response:", parseError);
         console.error("Raw response:", text.slice(0, 500));
 
-        // Fallback to diagram-heavy default animation
-        const diagramType = detectDiagramType(topic);
+        // Fallback to a custom-drawn default animation instead of static diagram layouts
         steps = [
           {
             type: "highlight",
@@ -1021,25 +1042,16 @@ export async function registerRoutes(
             color: "#d97757",
           },
           {
-            type: "diagram",
-            content: diagramType,
-            duration: 6
-          },
-          {
-            type: "diagram",
-            content: diagramType,
-            duration: 6
-          },
-          {
             type: "text",
-            content: description.slice(0, 50),
-            duration: 2,
+            content: description.slice(0, 60) + "...",
+            duration: 3,
             fontSize: 14,
           },
           {
-            type: "diagram",
-            content: diagramType,
-            duration: 7
+            type: "custom",
+            content: "Visualizing logic",
+            duration: 8,
+            script: "const fg = isDark ? '#fff' : '#000';\nctx.fillStyle = ACCENT + '20';\nconst displayW = w * 0.6;\nconst bgX = (w - displayW) / 2;\nroundRect(ctx, bgX, h/2 - 40, displayW, 80, 12);\nctx.fill();\nctx.strokeStyle = ACCENT;\nctx.lineWidth = 2;\nctx.stroke();\n\nconst movingX = lerp(bgX + 20, bgX + displayW - 40, ease(progress));\nctx.fillStyle = ACCENT;\nctx.beginPath();\nctx.arc(movingX, h/2, 10, 0, Math.PI * 2);\nctx.fill();\n\nctx.fillStyle = fg;\nctx.font = '600 16px sans-serif';\nctx.textAlign = 'center';\nctx.fillText('Processing...', w/2, h/2 - 60);"
           },
           {
             type: "text",

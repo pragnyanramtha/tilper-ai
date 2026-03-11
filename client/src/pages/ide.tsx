@@ -142,6 +142,7 @@ export default function IDEPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/progress"] });
       queryClient.invalidateQueries({ queryKey: ["/api/progress", challengeId] });
       queryClient.invalidateQueries({ queryKey: ["/api/challenges"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/plans"] });
     } catch (err: any) {
       setOutput(`Error: ${err.message}`);
     } finally {
@@ -216,14 +217,7 @@ export default function IDEPage() {
           <BookOpen className="w-3.5 h-3.5 mr-1.5" />
           Lesson
         </TabsTrigger>
-        <TabsTrigger
-          value="visual"
-          className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2.5 text-xs"
-          data-testid="tab-visual"
-        >
-          <Play className="w-3.5 h-3.5 mr-1.5" />
-          Visual
-        </TabsTrigger>
+
         <TabsTrigger
           value="mentor"
           className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2.5 text-xs"
@@ -238,14 +232,7 @@ export default function IDEPage() {
           <ChallengeDetail challenge={challenge} />
         </div>
       </TabsContent>
-      <TabsContent value="visual" className="flex-1 mt-0 min-h-0">
-        <AnimationViewer
-          topic={challenge.topic}
-          animationData={animationData}
-          isLoading={isAnimationLoading}
-          onRequestAnimation={handleRequestAnimation}
-        />
-      </TabsContent>
+
       <TabsContent value="mentor" className="flex-1 mt-0 min-h-0">
         <MentorChat
           challengeContext={{

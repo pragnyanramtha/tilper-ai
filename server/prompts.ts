@@ -462,15 +462,14 @@ Step structure to follow:
 1. "highlight" — Title of the challenge (2s)
 2. "text" — State the core problem in plain English (3s)
 3. "custom" — Write a custom JS Canvas script to visualize the input values or problem statement.
-4. "diagram" — Use a fallback diagram type (like "tree" or "array") if a standard layout makes sense.
-5. "code" — Show the SOLUTION APPROACH step-by-step with the actual function being built (5s)
-6. "custom" — Another entirely unique visualization of the logic executing (e.g. tracking a loop or math exactly).
+4. "text" or "code" — Explain the approach.
+5. "custom" — Another entirely unique visualization of the logic executing step-by-step using actual values. Track a loop or math visually!
+6. "code" — Show the complete solution revealing the key logic (4s).
 7. "highlight" — Key takeaway or complexity (2s)
 
-Available step types:
-- "custom": Write raw JavaScript to draw on an HTML5 Canvas using the "script" field! This is the most powerful type.
-- "diagram": Use predefined types ("tree", "stack", "queue", "linkedlist", "sorting", "hashmap", "array", "variables", "loop", "graph", "function", "conditional")
-- "code": Code snippet with actual code (use \\n for newlines)
+Available step types (DO NOT USE ANY OTHERS):
+- "custom": Write raw JavaScript to draw on an HTML5 Canvas using the "script" field! This is the MANDATORY type for all diagrams. It makes visuals truly custom.
+- "code": Code snippet with actual code (use \\n for newlines). Keeps text under 5 lines.
 - "text": Short explanation (max 12 words)
 - "highlight": Key takeaway (max 6 words)
 
