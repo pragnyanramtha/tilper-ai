@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Fragment, type KeyboardEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Send, Sparkles, Loader2, Wrench } from "lucide-react";
+import { Send, Sparkles, Wrench, BookOpen, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -10,8 +10,35 @@ import remarkGfm from "remark-gfm";
 import { useAppContext } from "@/lib/app-context";
 import type { UserProfile, Challenge } from "@shared/schema";
 
+type LessonEvent = { type: "plan_created"; title: string } | { type: "challenge_created"; title: string };
+
+function LessonEventBubble({ event }: { event: LessonEvent }) {
+  if (event.type === "plan_created") {
+    return (
+      <div className="flex justify-center">
+        <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium animate-in fade-in slide-in-from-bottom-2 duration-500">
+          <BookOpen className="w-3.5 h-3.5" />
+          <span>📚 Learning plan created: <strong>{event.title}</strong></span>
+        </div>
+      </div>
+    );
+  }
+  if (event.type === "challenge_created") {
+    return (
+      <div className="flex justify-center">
+        <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-medium animate-in fade-in slide-in-from-bottom-2 duration-500">
+          <Trophy className="w-3.5 h-3.5" />
+          <span>⚡ Challenge dropped: <strong>{event.title}</strong></span>
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
+
 export function ChatPanel() {
   const { mode, chatMessages, setChatMessages, activeChallengeId, activeConversationId, setActiveConversationId, sessionId } = useAppContext();
+  const [lessonEvents, setLessonEvents] = useState<Map<number, LessonEvent>>(new Map());
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [thinking, setThinking] = useState<string | null>(null);
@@ -107,10 +134,11 @@ export function ChatPanel() {
 
       const decoder = new TextDecoder();
       let assistantContent = "";
-      // Don't add assistant message until we get actual content
       let assistantMessageAdded = false;
+      let streamDone = false;
+      let pendingLessonEvent: LessonEvent | null = null;
 
-      while (true) {
+      while (!streamDone) {
         const { done, value } = await reader.read();
         if (done) break;
 
@@ -118,51 +146,64 @@ export function ChatPanel() {
         const lines = chunk.split("\n");
 
         for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            try {
-              const data = JSON.parse(line.slice(6));
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
 
-              if (data.thinking) {
-                setThinking(data.thinking);
+            if (data.thinking) {
+              setThinking(data.thinking);
+            }
+
+            if (data.toolResult) {
+              const { type } = data.toolResult;
+              if (type === "plan_created") {
+                pendingLessonEvent = { type: "plan_created", title: data.toolResult.plan?.title || "Your Plan" };
+                queryClient.invalidateQueries({ queryKey: ["/api/plans"] });
+              } else if (type === "challenge_created") {
+                pendingLessonEvent = { type: "challenge_created", title: data.toolResult.challenge?.title || "Challenge" };
+                queryClient.invalidateQueries({ queryKey: ["/api/challenges"] });
               }
+            }
 
-              if (data.done && currentConvId) {
-                // Save assistant message when done
+            if (data.content) {
+              setThinking(null);
+              if (!assistantMessageAdded) {
+                setChatMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+                assistantMessageAdded = true;
+              }
+              assistantContent += data.content;
+              setChatMessages((prev) => {
+                const updated = [...prev];
+                if (updated[updated.length - 1].role === "assistant") {
+                  updated[updated.length - 1] = { role: "assistant", content: assistantContent };
+                }
+                return updated;
+              });
+            }
+
+            if (data.done) {
+              streamDone = true;
+              setThinking(null);
+              // Attach lesson event to the current last assistant message index
+              if (pendingLessonEvent) {
+                setChatMessages((prev) => {
+                  // capture index then update lesson events separately
+                  const idx = prev.length - 1;
+                  // Use a timeout to avoid setState-inside-setState
+                  setTimeout(() => setLessonEvents((m) => new Map(m).set(idx, pendingLessonEvent!)), 0);
+                  return prev;
+                });
+              }
+              if (currentConvId && assistantContent.trim()) {
                 await fetch(`/api/conversations/${currentConvId}/messages`, {
                   method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    "x-session-id": sessionId,
-                  },
-                  body: JSON.stringify({
-                    role: "assistant",
-                    content: assistantContent,
-                  }),
-                });
-                setThinking(null);
-                break;
-              }
-
-              if (data.content) {
-                setThinking(null); // Clear thinking when content starts
-                if (!assistantMessageAdded) {
-                  setChatMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-                  assistantMessageAdded = true;
-                }
-                assistantContent += data.content;
-                setChatMessages((prev) => {
-                  const updated = [...prev];
-                  if (updated[updated.length - 1].role === "assistant") {
-                    updated[updated.length - 1] = {
-                      role: "assistant",
-                      content: assistantContent,
-                    };
-                  }
-                  return updated;
+                  headers: { "Content-Type": "application/json", "x-session-id": sessionId },
+                  body: JSON.stringify({ role: "assistant", content: assistantContent }),
                 });
               }
-            } catch { }
-          }
+              break;
+            }
+          } catch { }
         }
       }
     } catch (error) {
@@ -180,7 +221,7 @@ export function ChatPanel() {
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       sendMessage(input);
@@ -237,42 +278,44 @@ export function ChatPanel() {
           )}
 
           {chatMessages.map((msg, i) => (
-            <div
-              key={i}
-              className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-2 duration-300`}
-              data-testid={`chat-message-${msg.role}-${i}`}
-            >
-              {msg.role === "assistant" && (
-                <Avatar className="w-8 h-8 flex-shrink-0 mt-1 shadow-sm ring-1 ring-white/20">
-                  <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/5 text-primary text-xs font-semibold">
-                    AI
-                  </AvatarFallback>
-                </Avatar>
-              )}
+            <Fragment key={i}>
               <div
-                className={`max-w-[85%] rounded-2xl px-5 py-3.5 text-sm shadow-sm ${msg.role === "user"
-                  ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
-                  : "glass-panel text-foreground"
-                  }`}
+                className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-2 duration-300`}
+                data-testid={`chat-message-${msg.role}-${i}`}
               >
-                {msg.role === "assistant" ? (
-                  <div className="prose prose-sm dark:prose-invert max-w-none [&_pre]:bg-black/30 [&_pre]:backdrop-blur-md [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:text-xs [&_code]:text-xs [&_p]:leading-relaxed">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {msg.content || "\u200B"}
-                    </ReactMarkdown>
-                  </div>
-                ) : (
-                  <p className="leading-relaxed">{msg.content}</p>
+                {msg.role === "assistant" && (
+                  <Avatar className="w-8 h-8 flex-shrink-0 mt-1 shadow-sm ring-1 ring-white/20">
+                    <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/5 text-primary text-xs font-semibold">
+                      AI
+                    </AvatarFallback>
+                  </Avatar>
+                )}
+                <div
+                  className={`max-w-[85%] rounded-2xl px-5 py-3.5 text-sm shadow-sm ${msg.role === "user"
+                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
+                    : "glass-panel text-foreground"
+                    }`}
+                >
+                  {msg.role === "assistant" ? (
+                    <div className="prose prose-sm dark:prose-invert max-w-none [&_pre]:bg-black/30 [&_pre]:backdrop-blur-md [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:text-xs [&_code]:text-xs [&_p]:leading-relaxed">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {msg.content || "\u200B"}
+                      </ReactMarkdown>
+                    </div>
+                  ) : (
+                    <p className="leading-relaxed">{msg.content}</p>
+                  )}
+                </div>
+                {msg.role === "user" && (
+                  <Avatar className="w-8 h-8 flex-shrink-0 mt-1 shadow-sm ring-1 ring-white/20">
+                    <AvatarFallback className="bg-secondary text-secondary-foreground text-xs font-semibold">
+                      {profile?.name?.[0]?.toUpperCase() || "U"}
+                    </AvatarFallback>
+                  </Avatar>
                 )}
               </div>
-              {msg.role === "user" && (
-                <Avatar className="w-8 h-8 flex-shrink-0 mt-1 shadow-sm ring-1 ring-white/20">
-                  <AvatarFallback className="bg-secondary text-secondary-foreground text-xs font-semibold">
-                    {profile?.name?.[0]?.toUpperCase() || "U"}
-                  </AvatarFallback>
-                </Avatar>
-              )}
-            </div>
+              {lessonEvents.has(i) && <LessonEventBubble event={lessonEvents.get(i)!} />}
+            </Fragment>
           ))}
 
           {isStreaming && (
