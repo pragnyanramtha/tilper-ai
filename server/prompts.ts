@@ -454,52 +454,52 @@ Challenge: "${title}"
 Topic: ${topic}
 Description: ${description}
 
-CRITICAL: Every step must have UNIQUE content. Never repeat the same visual twice. Build understanding progressively.
+CRITICAL: Every step must have UNIQUE content. Build understanding progressively. To make the visuals TRULY CUSTOM to this exact problem, write actual JavaScript canvas rendering code using the "custom" step type!
 
 Generate 7-10 steps that walk through HOW to solve this problem:
 
 Step structure to follow:
 1. "highlight" — Title of the challenge (2s)
 2. "text" — State the core problem in plain English (3s)
-3. "text" or "code" — Show the input/output with REAL example values from the description (4s)
-4. "diagram" + "text" sequence — Show the KEY CONCEPT or data structure needed (use different diagram types if concept changes across steps)
+3. "custom" — Write a custom JS Canvas script to visualize the input values or problem statement.
+4. "diagram" — Use a fallback diagram type (like "tree" or "array") if a standard layout makes sense.
 5. "code" — Show the SOLUTION APPROACH step-by-step with the actual function being built (5s)
-6. "code" — Show the complete solution revealing the key logic (4s)
+6. "custom" — Another entirely unique visualization of the logic executing (e.g. tracking a loop or math exactly).
 7. "highlight" — Key takeaway or complexity (2s)
 
-DIAGRAM types available (each shows a DIFFERENT concept — pick the right one):
-- "tree" → use for recursive/BST problems
-- "array" → use for array indexing, list problems
-- "loop" → use for iteration, counting, traversal
-- "function" → use for function call flow, parameters → return
-- "variables" → use for data types, type conversion
-- "conditional" → use for if/else branching logic
-- "sorting" → use for comparison, ordering problems
-- "hashmap" → use for key-value, lookup problems
-- "linkedlist" → use for pointer, next-node problems
-- "stack" → use for LIFO, call stack, backtracking
-- "queue" → use for FIFO, BFS problems
-- "graph" → use for path problems
+Available step types:
+- "custom": Write raw JavaScript to draw on an HTML5 Canvas using the "script" field! This is the most powerful type.
+- "diagram": Use predefined types ("tree", "stack", "queue", "linkedlist", "sorting", "hashmap", "array", "variables", "loop", "graph", "function", "conditional")
+- "code": Code snippet with actual code (use \\n for newlines)
+- "text": Short explanation (max 12 words)
+- "highlight": Key takeaway (max 6 words)
 
-RULES:
-- "code" content: use actual Python/JS code relevant to THIS challenge, not generic examples. Use \\n for newlines.
-- "text" content: max 12 words, concrete and specific to THIS problem
-- "highlight" content: max 6 words
-- "diagram" content: use DIFFERENT diagram types if the concept calls for it (e.g. "function" then "loop" then "conditional")
-- Duration: highlight=2, text=3, diagram=6, code=4
-- Every step MUST teach something new about solving THIS specific challenge
+For "custom" steps, provide your code inside the "script" property.
+Globally available variables in your script environment:
+- ctx: CanvasRenderingContext2D
+- w: canvas width (number)
+- h: canvas height (number)
+- progress: animation progress from 0.0 to 1.0 (number)
+- isDark: boolean
+- ACCENT, ACCENT2, GREEN, YELLOW, RED (color strings)
+- Helpers: ease(t), lerp(a,b,t), roundRect(ctx, x, y, width, height, radius), drawArrow(ctx, x1, y1, x2, y2, color, headSize=6)
 
-EXAMPLE for a "split bill with tip" challenge:
+EXAMPLE "custom" step:
+{
+  "type": "custom",
+  "content": "Custom logic visual",
+  "duration": 6,
+  "script": "const fg = isDark ? '#fff' : '#000';\\nctx.fillStyle = ACCENT + '30';\\nconst x = lerp(w*0.2, w*0.8, Math.min(1, progress*1.5));\\nroundRect(ctx, x, h/2 - 20, 40, 40, 8);\\nctx.fill();\\nctx.fillStyle = fg;\\nctx.font = '600 20px sans-serif';\\nctx.fillText('Data', x + 20, h/2);"
+}
+
+EXAMPLE full structure:
 [
   {"type":"highlight","content":"Bill Splitting Problem","duration":2,"color":"#d97757"},
-  {"type":"text","content":"Add tip to bill, then divide by people","duration":3,"fontSize":15},
   {"type":"code","content":"# Input: bill=50, tip=20%, friends=4\\n# Output: cost per person","duration":4},
-  {"type":"diagram","content":"function","duration":6},
-  {"type":"code","content":"total = bill * (1 + tip/100)\\n# 50 * 1.20 = 60.0","duration":4},
-  {"type":"diagram","content":"variables","duration":5},
-  {"type":"code","content":"per_person = round(total / friends, 2)\\n# 60.0 / 4 = 15.0","duration":4},
-  {"type":"highlight","content":"O(1) — simple math!","duration":2,"color":"#6bc46d"}
+  {"type":"custom","content":"Draw split bill","duration":6,"script":"ctx.fillStyle=ACCENT; ctx.font='20px Arial'; ctx.fillText('Calculations here: ' + Math.round(progress*100), w/2, h/2);" },
+  {"type":"code","content":"total = bill * 1.20","duration":4},
+  {"type":"highlight","content":"O(1) complexity","duration":2,"color":"#6bc46d"}
 ]
 
-Return ONLY valid JSON array, no markdown. Make each step teach something NEW about solving THIS challenge.`;
+Return ONLY a valid JSON array. Ensure all "script" properties properly escape newlines and double quotes.`;
 }
