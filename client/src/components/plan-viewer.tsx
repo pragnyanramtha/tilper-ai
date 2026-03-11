@@ -1,4 +1,4 @@
-
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { ArrowLeft, BookOpen, CheckCircle2, Circle, Clock, Loader2, Play } from "lucide-react";
@@ -13,6 +13,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 export function PlanViewer() {
     const { activePlanId, setActivePlanId, setActiveChallengeId, setMode } = useAppContext();
     const [, navigate] = useLocation();
+    const [startingTopicId, setStartingTopicId] = useState<number | null>(null);
 
     const { data: plan, isLoading } = useQuery<LearningPlan>({
         queryKey: ["/api/plans", activePlanId],
@@ -44,8 +45,9 @@ export function PlanViewer() {
 
     // ... (rest of component)
 
-    const handleStartTopic = async (topic: any) => {
+    const handleStartTopic = async (topic: any, index: number) => {
         // Generate a challenge for this topic
+        setStartingTopicId(index);
         try {
             const res = await apiRequest("POST", "/api/challenges/generate", {
                 topic: topic.title,
@@ -64,6 +66,8 @@ export function PlanViewer() {
             navigate(`/ide?challenge=${challenge.id}`);
         } catch (e) {
             console.error("Failed to start topic:", e);
+        } finally {
+            setStartingTopicId(null);
         }
     };
 
@@ -117,9 +121,22 @@ export function PlanViewer() {
                                 </CardHeader>
                                 {isNext && (
                                     <CardContent className="pt-2">
-                                        <Button onClick={() => handleStartTopic(topic)} className="w-full sm:w-auto gap-2">
-                                            <Play className="w-3.5 h-3.5" />
-                                            Start Lesson
+                                        <Button
+                                            onClick={() => handleStartTopic(topic, index)}
+                                            className="w-full sm:w-auto gap-2"
+                                            disabled={startingTopicId === index}
+                                        >
+                                            {startingTopicId === index ? (
+                                                <>
+                                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                    Please wait...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Play className="w-3.5 h-3.5" />
+                                                    Start Lesson
+                                                </>
+                                            )}
                                         </Button>
                                     </CardContent>
                                 )}

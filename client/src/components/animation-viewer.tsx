@@ -3,12 +3,13 @@ import { Play, Pause, RotateCcw, SkipForward, SkipBack, Loader2, Sparkles } from
 import { Button } from "@/components/ui/button";
 
 interface AnimationStep {
-  type: "text" | "code" | "diagram" | "highlight";
+  type: "text" | "code" | "diagram" | "highlight" | "custom";
   content: string;
   duration: number;
   position?: { x: number; y: number };
   color?: string;
   fontSize?: number;
+  script?: string;
 }
 
 interface AnimationViewerProps {
@@ -830,7 +831,10 @@ function drawFlow(ctx: CanvasRenderingContext2D, w: number, h: number, progress:
 }
 
 function drawConceptDiagram(ctx: CanvasRenderingContext2D, w: number, h: number, concept: string, progress: number, isDark: boolean) {
-  const type = detectDiagramType(concept);
+  // The AI may pass the exact type name directly (e.g. "function", "loop", "conditional")
+  // OR a descriptive phrase like "binary search tree" — handle both.
+  const KNOWN_TYPES = new Set(["tree", "stack", "queue", "linkedlist", "sorting", "hashmap", "array", "loop", "graph", "function", "conditional", "class", "variables", "flow"]);
+  const type = KNOWN_TYPES.has(concept.toLowerCase()) ? concept.toLowerCase() : detectDiagramType(concept);
   switch (type) {
     case "tree": return drawTree(ctx, w, h, progress, isDark);
     case "stack": return drawStack(ctx, w, h, progress, isDark);
@@ -838,12 +842,12 @@ function drawConceptDiagram(ctx: CanvasRenderingContext2D, w: number, h: number,
     case "linkedlist": return drawLinkedList(ctx, w, h, progress, isDark);
     case "sorting": return drawSorting(ctx, w, h, progress, isDark);
     case "hashmap": return drawHashMap(ctx, w, h, progress, isDark);
-    case "array": case "variables": return drawArray(ctx, w, h, progress, isDark);
+    case "array": return drawArray(ctx, w, h, progress, isDark);
+    case "variables": return drawVariables(ctx, w, h, progress, isDark);
     case "loop": return drawLoop(ctx, w, h, progress, isDark);
     case "graph": return drawGraph(ctx, w, h, progress, isDark);
-    case "function": return drawFunction(ctx, w, h, progress, isDark);
+    case "function": case "class": return drawFunction(ctx, w, h, progress, isDark);
     case "conditional": return drawConditional(ctx, w, h, progress, isDark);
-    case "class": return drawFunction(ctx, w, h, progress, isDark);
     default: return drawFlow(ctx, w, h, progress, isDark);
   }
 }
@@ -1036,6 +1040,25 @@ function ManimCanvas({ steps, isPlaying, onStepChange }: { steps: AnimationStep[
       }
     } else if (step.type === "diagram") {
       drawConceptDiagram(ctx, w, h, step.content, progress, isDark);
+      // Show a caption at bottom so user knows what concept is being illustrated
+      const DIAGRAM_LABELS: Record<string, string> = {
+        tree: "Tree Traversal", stack: "Stack (LIFO)", queue: "Queue (FIFO)",
+        linkedlist: "Linked List", sorting: "Sorting", hashmap: "Hash Map",
+        array: "Array", variables: "Data Types", loop: "Loop Iteration",
+        graph: "Graph", function: "Function Flow", conditional: "If/Else Logic",
+        class: "Class Structure", flow: "Program Flow",
+      };
+      const KNOWN = new Set(Object.keys(DIAGRAM_LABELS));
+      const resolvedType = KNOWN.has(step.content.toLowerCase()) ? step.content.toLowerCase() : detectDiagramType(step.content);
+      const label = DIAGRAM_LABELS[resolvedType] || step.content;
+      const alpha = Math.min(1, progress * 4);
+      ctx.globalAlpha = alpha;
+      ctx.font = `600 11px 'Space Grotesk', sans-serif`;
+      ctx.fillStyle = ACCENT;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "bottom";
+      ctx.fillText(`◆ ${label}`, w / 2, h - 6);
+      ctx.globalAlpha = 1;
     } else if (step.type === "highlight") {
       const accentColor = step.color || ACCENT;
       ctx.font = `700 22px 'Space Grotesk', sans-serif`;
@@ -1048,7 +1071,22 @@ function ManimCanvas({ steps, isPlaying, onStepChange }: { steps: AnimationStep[
       ctx.scale(scale, scale);
       ctx.fillText(step.content, 0, 0);
       ctx.restore();
+    } else if (step.type === "custom" && step.script) {
+      try {
+        const fn = new Function(
+          "ctx", "w", "h", "progress", "isDark", "ease", "lerp", "roundRect", "drawArrow", "ACCENT", "ACCENT2", "GREEN", "YELLOW", "RED",
+          step.script
+        );
+        fn(ctx, w, h, progress, isDark, ease, lerp, roundRect, drawArrow, ACCENT, ACCENT2, GREEN, YELLOW, RED);
+      } catch (err) {
+        console.error("Custom animation script error:", err, step.script);
+        ctx.font = `600 12px 'Space Grotesk', sans-serif`;
+        ctx.fillStyle = RED;
+        ctx.textAlign = "center";
+        ctx.fillText("Failed to render custom visualization", w / 2, h / 2);
+      }
     }
+
   }, []);
 
   useEffect(() => {

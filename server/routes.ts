@@ -17,8 +17,6 @@ const ai = new GoogleGenAI({
 });
 
 // ─── Model Routing ───
-// Sonnet for complex reasoning: main chat (agentic), animation generation
-// Haiku for structured output: challenge gen, evaluation, plan gen
 const MODELS = {
   chat: "gemini-3.1-flash-lite-preview" as const,
   animation: "gemini-3.1-flash-lite-preview" as const,
@@ -26,6 +24,80 @@ const MODELS = {
   evaluation: "gemini-3.1-flash-lite-preview" as const,
   planGen: "gemini-3.1-flash-lite-preview" as const,
 };
+
+// ─── Retry Helpers ───
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+function isRetryableError(err: any): boolean {
+  const code = err?.code ?? err?.cause?.code ?? "";
+  const msg = (err?.message ?? "").toLowerCase();
+  return (
+    code === "ENETUNREACH" ||
+    code === "ECONNRESET" ||
+    code === "ETIMEDOUT" ||
+    code === "ECONNREFUSED" ||
+    msg.includes("fetch failed") ||
+    msg.includes("network") ||
+    msg.includes("socket hang up")
+  );
+}
+
+/**
+ * Runs a single agentic round with retry+backoff.
+ * Returns the accumulated text + any function calls from the stream.
+ * Throws only when all retries are exhausted.
+ */
+async function runStreamRound(
+  params: Parameters<typeof ai.models.generateContentStream>[0],
+  onChunkText: (text: string) => void,
+  maxRetries = 3
+): Promise<{ text: string; toolCalls: any[]; hasToolUse: boolean; rawModelParts: any[] }> {
+  let lastError: any;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await ai.models.generateContentStream(params);
+
+      let accText = "";
+      const toolCalls: any[] = [];
+      const rawModelParts: any[] = [];
+      let hasToolUse = false;
+
+      for await (const chunk of response) {
+        // Collect raw parts from candidates to preserve thought_signature fields
+        if (chunk.candidates) {
+          for (const candidate of chunk.candidates) {
+            if (candidate.content?.parts) {
+              for (const part of candidate.content.parts) {
+                rawModelParts.push(part);
+              }
+            }
+          }
+        }
+        if (chunk.text) {
+          accText += chunk.text;
+          onChunkText(chunk.text);
+        }
+        if (chunk.functionCalls && chunk.functionCalls.length > 0) {
+          hasToolUse = true;
+          for (const call of chunk.functionCalls) {
+            toolCalls.push(call);
+          }
+        }
+      }
+
+      return { text: accText, toolCalls, hasToolUse, rawModelParts };
+    } catch (err: any) {
+      lastError = err;
+      if (!isRetryableError(err) || attempt === maxRetries) throw err;
+      const delay = 1000 * Math.pow(2, attempt);
+      console.warn(`[retry] Gemini API error (attempt ${attempt + 1}/${maxRetries + 1}): ${err.code ?? err.message}. Retrying in ${delay}ms...`);
+      await sleep(delay);
+    }
+  }
+
+  throw lastError;
+}
 
 function getSessionId(req: any): string {
   if (!req.headers["x-session-id"]) {
@@ -786,84 +858,88 @@ export async function registerRoutes(
       let assistantFinalContent = "";
       while (round < MAX_TOOL_ROUNDS) {
         round++;
-        const response = await ai.models.generateContentStream({
-          model: MODELS.chat,
-          contents: currentMessages,
-          config: {
-            systemInstruction: agenticPrompt,
-            tools: [{ functionDeclarations: MENTOR_TOOLS }],
-            temperature: 0.7,
-          }
-        });
 
-        let hasToolUse = false;
-        const toolResults: any[] = [];
-        let toolCalls: any[] = [];
-
-        for await (const chunk of response) {
-          if (chunk.text) {
-            assistantFinalContent += chunk.text;
-            const textChunks = chunk.text.split(/(?<=\n)/g).flatMap(line => {
-              if (line.length <= 200) return [line];
-              return line.match(/.{1,200}/g) || [line];
-            });
-            for (const textChunk of textChunks) {
-              res.write(`data: ${JSON.stringify({ content: textChunk })}\n\n`);
-            }
-          }
-          if (chunk.functionCalls && chunk.functionCalls.length > 0) {
-            hasToolUse = true;
-            for (const call of chunk.functionCalls) {
-              toolCalls.push(call);
-            }
-          }
+        // Send thinking indicator on rounds after a tool call
+        if (round > 1) {
+          res.write(`data: ${JSON.stringify({ thinking: "Thinking..." })}\n\n`);
         }
 
-        if (hasToolUse) {
-          for (const call of toolCalls) {
-            res.write(`data: ${JSON.stringify({ thinking: `Using ${call.name}...` })}\n\n`);
-            try {
-              const toolResult = await handleToolCall(
-                call.name,
-                call.args,
-                sessionId
-              );
-
-              if (toolResult.metadata) {
-                res.write(
-                  `data: ${JSON.stringify({ toolResult: toolResult.metadata })}\n\n`
-                );
+        let roundResult: Awaited<ReturnType<typeof runStreamRound>>;
+        try {
+          roundResult = await runStreamRound(
+            {
+              model: MODELS.chat,
+              contents: currentMessages,
+              config: {
+                systemInstruction: agenticPrompt,
+                tools: [{ functionDeclarations: MENTOR_TOOLS }],
+                temperature: 0.7,
+                // Disable thinking to avoid thought_signature requirements in multi-turn tool calls
+                thinkingConfig: { thinkingBudget: 0 },
               }
+            },
+            (text) => {
+              assistantFinalContent += text;
+              const textChunks = text.split(/(?<=\n)/g).flatMap(line => {
+                if (line.length <= 200) return [line];
+                return line.match(/.{1,200}/g) || [line];
+              });
+              for (const textChunk of textChunks) {
+                res.write(`data: ${JSON.stringify({ content: textChunk })}\n\n`);
+              }
+            }
+          );
+        } catch (streamErr: any) {
+          // All retries exhausted — surface error to client and bail
+          console.error(`[chat] All retries failed on round ${round}:`, streamErr.code ?? streamErr.message);
+          res.write(`data: ${JSON.stringify({ error: "Connection to AI failed after retries. Please try again." })}\n\n`);
+          res.end();
+          return;
+        }
 
+        const { toolCalls, hasToolUse } = roundResult;
+        const toolResults: any[] = [];
+
+        if (hasToolUse) {
+          const getThinkingMessage = (name: string) => {
+            switch (name) {
+              case "generate_learning_plan": return "Crafting your learning journey...";
+              case "generate_challenge": return "Preparing a tailored challenge...";
+              case "web_search": return "Searching for the latest insights...";
+              case "remember_about_student": return "Personalizing your experience...";
+              default: return `Thinking (${name})...`;
+            }
+          };
+
+          for (const call of toolCalls) {
+            res.write(`data: ${JSON.stringify({ thinking: getThinkingMessage(call.name) })}\n\n`);
+            try {
+              const toolResult = await handleToolCall(call.name, call.args, sessionId);
+              if (toolResult.metadata) {
+                res.write(`data: ${JSON.stringify({ toolResult: toolResult.metadata })}\n\n`);
+              }
               toolResults.push({
-                functionResponse: {
-                  name: call.name,
-                  response: { result: toolResult.result }
-                }
+                functionResponse: { name: call.name, response: { result: toolResult.result } }
               });
             } catch (err: any) {
               toolResults.push({
-                functionResponse: {
-                  name: call.name,
-                  response: { error: err.message }
-                }
+                functionResponse: { name: call.name, response: { error: err.message } }
               });
             }
           }
         }
 
-        if (!hasToolUse) {
-          break;
-        }
+        if (!hasToolUse) break;
 
+        // Use raw model parts (not reconstructed) to preserve thought_signature fields
+        // required by the Gemini API for tool call continuations
         currentMessages.push({
           role: "model",
-          parts: toolCalls.map(c => ({ functionCall: c }))
+          parts: roundResult.rawModelParts.length > 0
+            ? roundResult.rawModelParts
+            : toolCalls.map(c => ({ functionCall: c })),
         });
-        currentMessages.push({
-          role: "user",
-          parts: toolResults
-        });
+        currentMessages.push({ role: "user", parts: toolResults });
       }
 
       // Save assistant response if conversation exists

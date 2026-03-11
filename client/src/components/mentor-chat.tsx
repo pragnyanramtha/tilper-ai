@@ -136,7 +136,8 @@ export function MentorChat({ challengeContext, compact = false, currentCode }: M
       let assistantContent = "";
       let assistantMessageAdded = false;
 
-      while (true) {
+      let streamDone = false;
+      while (!streamDone) {
         const { done, value } = await reader.read();
         if (done) break;
 
@@ -144,56 +145,55 @@ export function MentorChat({ challengeContext, compact = false, currentCode }: M
         const lines = chunk.split("\n");
 
         for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            try {
-              const data = JSON.parse(line.slice(6));
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
 
-              if (data.thinking) {
-                setThinkingMessage(data.thinking);
+            if (data.error) {
+              streamDone = true;
+              setThinkingMessage(null);
+              setMessages((prev) => [
+                ...prev,
+                { role: "assistant", content: "⚠️ I ran into a connection issue. Please try again in a moment." },
+              ]);
+              break;
+            }
+
+            if (data.thinking) {
+              setThinkingMessage(data.thinking);
+            }
+
+            if (data.toolResult) {
+              if (data.toolResult.type === "challenge_created") {
+                queryClient.invalidateQueries({ queryKey: ["/api/challenges"] });
               }
+            }
 
-              if (data.content) {
-                setThinkingMessage(null);
-                if (!assistantMessageAdded) {
-                  setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-                  assistantMessageAdded = true;
-                }
-                assistantContent += data.content;
-                setMessages((prev) => {
-                  const updated = [...prev];
-                  if (updated[updated.length - 1].role === "assistant") {
-                    updated[updated.length - 1] = {
-                      role: "assistant",
-                      content: assistantContent,
-                    };
-                  }
-                  return updated;
-                });
+            if (data.content) {
+              setThinkingMessage(null);
+              if (!assistantMessageAdded) {
+                setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+                assistantMessageAdded = true;
               }
-
-              if (data.done && currentConvId) {
-                // Save assistant message when done
-                await fetch(`/api/conversations/${currentConvId}/messages`, {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    "x-session-id": sessionId,
-                  },
-                  body: JSON.stringify({
+              assistantContent += data.content;
+              setMessages((prev) => {
+                const updated = [...prev];
+                if (updated[updated.length - 1].role === "assistant") {
+                  updated[updated.length - 1] = {
                     role: "assistant",
                     content: assistantContent,
-                  }),
-                });
-                break;
-              }
-
-              if (data.toolResult) {
-                if (data.toolResult.type === "challenge_created") {
-                  queryClient.invalidateQueries({ queryKey: ["/api/challenges"] });
+                  };
                 }
-              }
-            } catch { }
-          }
+                return updated;
+              });
+            }
+
+            if (data.done) {
+              streamDone = true;
+              setThinkingMessage(null);
+              break;
+            }
+          } catch { }
         }
       }
     } catch (err: any) {

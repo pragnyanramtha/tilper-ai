@@ -448,100 +448,58 @@ export function buildAnimationPrompt(
   title: string,
   description: string
 ): string {
-  return `You are an expert at creating educational programming animations similar to 3Blue1Brown and Manim style. Generate a sequence of animation steps to visualize the concept: "${topic}".
+  return `You are a programming teacher creating a step-by-step visual walkthrough for a coding challenge. Generate animation steps that TEACH the student how to solve it, using concrete values from the problem.
 
-Challenge: ${title}
+Challenge: "${title}"
+Topic: ${topic}
 Description: ${description}
 
-CRITICAL RULES:
-- PRIORITIZE VISUAL DIAGRAMS over text explanations
-- Use "diagram" type for 70-80% of steps
-- Keep text steps SHORT (max 10 words) and only for key insights
-- Show, don't tell - use visuals to explain concepts
-- Each animation should be primarily VISUAL and DIAGRAMMATIC
-- Set duration to 5-8 seconds for diagrams (slow, smooth animations)
-- Set duration to 2-3 seconds for text/highlights (quick transitions)
+CRITICAL: Every step must have UNIQUE content. Never repeat the same visual twice. Build understanding progressively.
 
-Create 6-10 animation steps following this structure:
-1. Start with a brief highlight (1 step, 2s duration)
-2. Show 4-6 DIAGRAM steps demonstrating the concept visually (5-8s each)
-3. Add 1-2 short code examples if relevant (3-4s each)
-4. End with a brief motivational text (1 step, 2s duration)
+Generate 7-10 steps that walk through HOW to solve this problem:
 
-Available diagram types (USE THESE HEAVILY):
-- "tree" - Binary trees, BST, tree traversal
-- "stack" - LIFO data structure, push/pop operations
-- "queue" - FIFO data structure, enqueue/dequeue
-- "linkedlist" - Linked list with nodes and pointers
-- "sorting" - Sorting algorithms, array manipulation
-- "hashmap" - Hash tables, dictionaries, key-value pairs
-- "array" - Arrays with indices, array operations
-- "loop" - Loop iterations, for/while loops
-- "graph" - Graphs with vertices and edges, BFS/DFS
-- "function" - Function calls, input/output flow
-- "conditional" - If/else branching, decision trees
-- "variables" - Variable types, data types
+Step structure to follow:
+1. "highlight" — Title of the challenge (2s)
+2. "text" — State the core problem in plain English (3s)
+3. "text" or "code" — Show the input/output with REAL example values from the description (4s)
+4. "diagram" + "text" sequence — Show the KEY CONCEPT or data structure needed (use different diagram types if concept changes across steps)
+5. "code" — Show the SOLUTION APPROACH step-by-step with the actual function being built (5s)
+6. "code" — Show the complete solution revealing the key logic (4s)
+7. "highlight" — Key takeaway or complexity (2s)
 
-Step types:
-1. "diagram" - Visual representation (USE THIS MOST - 70-80% of steps)
-2. "highlight" - Brief key point (max 5 words)
-3. "code" - Code snippet (use \\n for newlines, keep under 5 lines)
-4. "text" - Short explanation (max 10 words, use sparingly)
+DIAGRAM types available (each shows a DIFFERENT concept — pick the right one):
+- "tree" → use for recursive/BST problems
+- "array" → use for array indexing, list problems
+- "loop" → use for iteration, counting, traversal
+- "function" → use for function call flow, parameters → return
+- "variables" → use for data types, type conversion
+- "conditional" → use for if/else branching logic
+- "sorting" → use for comparison, ordering problems
+- "hashmap" → use for key-value, lookup problems
+- "linkedlist" → use for pointer, next-node problems
+- "stack" → use for LIFO, call stack, backtracking
+- "queue" → use for FIFO, BFS problems
+- "graph" → use for path problems
 
-EXAMPLE (Good - Diagram-heavy with proper durations):
+RULES:
+- "code" content: use actual Python/JS code relevant to THIS challenge, not generic examples. Use \\n for newlines.
+- "text" content: max 12 words, concrete and specific to THIS problem
+- "highlight" content: max 6 words
+- "diagram" content: use DIFFERENT diagram types if the concept calls for it (e.g. "function" then "loop" then "conditional")
+- Duration: highlight=2, text=3, diagram=6, code=4
+- Every step MUST teach something new about solving THIS specific challenge
+
+EXAMPLE for a "split bill with tip" challenge:
 [
-  {
-    "type": "highlight",
-    "content": "Binary Search Tree",
-    "duration": 2,
-    "color": "#d97757"
-  },
-  {
-    "type": "diagram",
-    "content": "tree",
-    "duration": 6
-  },
-  {
-    "type": "diagram",
-    "content": "tree",
-    "duration": 6
-  },
-  {
-    "type": "text",
-    "content": "Left < Parent < Right",
-    "duration": 2,
-    "fontSize": 14
-  },
-  {
-    "type": "diagram",
-    "content": "tree",
-    "duration": 7
-  },
-  {
-    "type": "code",
-    "content": "def insert(node, val):\\n  if val < node.val:\\n    node.left = insert(node.left, val)",
-    "duration": 4
-  },
-  {
-    "type": "diagram",
-    "content": "tree",
-    "duration": 6
-  },
-  {
-    "type": "text",
-    "content": "O(log n) search time!",
-    "duration": 2,
-    "fontSize": 14
-  }
+  {"type":"highlight","content":"Bill Splitting Problem","duration":2,"color":"#d97757"},
+  {"type":"text","content":"Add tip to bill, then divide by people","duration":3,"fontSize":15},
+  {"type":"code","content":"# Input: bill=50, tip=20%, friends=4\\n# Output: cost per person","duration":4},
+  {"type":"diagram","content":"function","duration":6},
+  {"type":"code","content":"total = bill * (1 + tip/100)\\n# 50 * 1.20 = 60.0","duration":4},
+  {"type":"diagram","content":"variables","duration":5},
+  {"type":"code","content":"per_person = round(total / friends, 2)\\n# 60.0 / 4 = 15.0","duration":4},
+  {"type":"highlight","content":"O(1) — simple math!","duration":2,"color":"#6bc46d"}
 ]
 
-BAD EXAMPLE (Too much text):
-[
-  {"type": "text", "content": "Let me explain binary search trees...", "duration": 3},
-  {"type": "text", "content": "They are hierarchical data structures...", "duration": 3},
-  {"type": "diagram", "content": "tree", "duration": 2}
-]
-
-Return ONLY valid JSON array (no markdown, no explanation). Make it VISUAL and DIAGRAMMATIC!`;
+Return ONLY valid JSON array, no markdown. Make each step teach something NEW about solving THIS challenge.`;
 }
-

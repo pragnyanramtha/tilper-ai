@@ -154,6 +154,17 @@ export function ChatPanel() {
               setThinking(data.thinking);
             }
 
+            if (data.error) {
+              // Server errored mid-stream — show friendly message
+              streamDone = true;
+              setThinking(null);
+              setChatMessages((prev) => [
+                ...prev,
+                { role: "assistant", content: "⚠️ I ran into a connection issue. Please try again in a moment." },
+              ]);
+              break;
+            }
+
             if (data.toolResult) {
               const { type } = data.toolResult;
               if (type === "plan_created") {
@@ -184,21 +195,11 @@ export function ChatPanel() {
             if (data.done) {
               streamDone = true;
               setThinking(null);
-              // Attach lesson event to the current last assistant message index
               if (pendingLessonEvent) {
                 setChatMessages((prev) => {
-                  // capture index then update lesson events separately
                   const idx = prev.length - 1;
-                  // Use a timeout to avoid setState-inside-setState
                   setTimeout(() => setLessonEvents((m) => new Map(m).set(idx, pendingLessonEvent!)), 0);
                   return prev;
-                });
-              }
-              if (currentConvId && assistantContent.trim()) {
-                await fetch(`/api/conversations/${currentConvId}/messages`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json", "x-session-id": sessionId },
-                  body: JSON.stringify({ role: "assistant", content: assistantContent }),
                 });
               }
               break;
