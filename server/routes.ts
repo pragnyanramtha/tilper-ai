@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
 import { z } from "zod";
 import {
   buildSystemPrompt,
@@ -12,19 +12,19 @@ import {
   type StudentContext,
 } from "./prompts";
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
 });
 
 // ─── Model Routing ───
 // Sonnet for complex reasoning: main chat (agentic), animation generation
 // Haiku for structured output: challenge gen, evaluation, plan gen
 const MODELS = {
-  chat: "claude-sonnet-4-5" as const,        // Main agentic conversation — needs reasoning
-  animation: "claude-sonnet-4-5" as const,   // Visual walkthrough generation — needs creativity
-  challengeGen: "claude-haiku-4-5" as const,  // Structured JSON output
-  evaluation: "claude-haiku-4-5" as const,    // Scoring code — structured output
-  planGen: "claude-haiku-4-5" as const,       // Structured plan JSON output
+  chat: "gemini-3.1-flash-lite-preview" as const,
+  animation: "gemini-3.1-flash-lite-preview" as const,
+  challengeGen: "gemini-3.1-flash-lite-preview" as const,
+  evaluation: "gemini-3.1-flash-lite-preview" as const,
+  planGen: "gemini-3.1-flash-lite-preview" as const,
 };
 
 function getSessionId(req: any): string {
@@ -93,16 +93,16 @@ async function webSearch(query: string): Promise<string> {
   }
 }
 
-const MENTOR_TOOLS: Anthropic.Tool[] = [
+const MENTOR_TOOLS: FunctionDeclaration[] = [
   {
     name: "web_search",
     description:
       "Search the web for information about programming topics, career paths, company requirements, technology trends, or any other topic the student asks about. Use this when the student asks about real-world things like jobs, companies, industry trends, or specific technical information you want to verify.",
-    input_schema: {
-      type: "object" as const,
+    parameters: {
+      type: Type.OBJECT,
       properties: {
         query: {
-          type: "string",
+          type: Type.STRING,
           description: "The search query to look up",
         },
       },
@@ -113,20 +113,19 @@ const MENTOR_TOOLS: Anthropic.Tool[] = [
     name: "generate_challenge",
     description:
       "Generate a coding challenge for the student to practice in the IDE. Use this PROACTIVELY when: the student wants to practice, you've just finished explaining a concept, you've identified a topic they should work on, or the conversation has been theoretical for too long (3+ exchanges without hands-on coding). This creates a challenge and opens it for the student.",
-    input_schema: {
-      type: "object" as const,
+    parameters: {
+      type: Type.OBJECT,
       properties: {
         topic: {
-          type: "string",
+          type: Type.STRING,
           description: "The coding topic for the challenge (e.g., 'array manipulation', 'recursion', 'string parsing')",
         },
         difficulty: {
-          type: "string",
-          enum: ["Beginner", "Intermediate", "Advanced"],
-          description: "Difficulty level based on student's experience",
+          type: Type.STRING,
+          description: "Difficulty level based on student's experience. Enum: Beginner, Intermediate, Advanced",
         },
         language: {
-          type: "string",
+          type: Type.STRING,
           description: "Programming language for the challenge (e.g. 'javascript', 'python', 'java', 'cpp', 'rust')",
         },
       },
@@ -137,30 +136,30 @@ const MENTOR_TOOLS: Anthropic.Tool[] = [
     name: "generate_learning_plan",
     description:
       "Generate a structured learning plan based on the conversation. Use this when: you have enough information about what the student wants to learn (topics + experience level + goals), the student asks for a plan/roadmap/path, or you're in planning mode and the student is ready. Creates a personalized plan with ordered topics they can work through.",
-    input_schema: {
-      type: "object" as const,
+    parameters: {
+      type: Type.OBJECT,
       properties: {
         title: {
-          type: "string",
+          type: Type.STRING,
           description: "Title for the learning plan — make it exciting and personal",
         },
         description: {
-          type: "string",
+          type: Type.STRING,
           description: "Brief description of the plan that makes the student excited",
         },
         topics: {
-          type: "array",
+          type: Type.ARRAY,
           items: {
-            type: "object",
+            type: Type.OBJECT,
             properties: {
-              title: { type: "string" },
-              description: { type: "string" },
+              title: { type: Type.STRING },
+              description: { type: Type.STRING },
               difficulty: {
-                type: "string",
-                enum: ["Beginner", "Intermediate", "Advanced"],
+                type: Type.STRING,
+                description: "Enum: Beginner, Intermediate, Advanced",
               },
               language: {
-                type: "string",
+                type: Type.STRING,
                 description: "Programming language for the topic",
               },
             },
@@ -176,11 +175,11 @@ const MENTOR_TOOLS: Anthropic.Tool[] = [
     name: "remember_about_student",
     description:
       "Save an important detail about the student for future conversations. Use this FREQUENTLY when the student shares ANYTHING meaningful: their interests, learning style, struggles, achievements, preferences, personality, career goals, hobbies, school info, or current projects. This data persists and makes you a better mentor over time.",
-    input_schema: {
-      type: "object" as const,
+    parameters: {
+      type: Type.OBJECT,
       properties: {
         memory: {
-          type: "string",
+          type: Type.STRING,
           description: "A concise note about the student to remember",
         },
       },
@@ -231,19 +230,15 @@ async function handleToolCall(
       const { topic, difficulty, language } = toolInput;
       const profile = await storage.getProfile(sessionId);
 
-      const response = await anthropic.messages.create({
+      const response = await ai.models.generateContent({
         model: MODELS.challengeGen,
-        max_tokens: 4096,
-        messages: [
-          {
-            role: "user",
-            content: buildChallengeGenerationPrompt(topic, difficulty, language, profile),
-          },
-        ],
+        contents: buildChallengeGenerationPrompt(topic, difficulty, language, profile),
+        config: {
+          temperature: 0.7,
+        }
       });
 
-      const text =
-        response.content[0].type === "text" ? response.content[0].text : "";
+      const text = response.text || "";
       let challengeData;
       try {
         const cleaned = text
@@ -418,19 +413,15 @@ export async function registerRoutes(
         ? `Student profile: Name: ${profile.name || "Unknown"}, Age: ${profile.age || "Unknown"}, Experience: ${profile.experience || "Unknown"}, Goals: ${profile.goals || "Unknown"}, Preferred Language: ${profile.preferredLanguage || "javascript"}`
         : "No profile info available.";
 
-      const response = await anthropic.messages.create({
+      const response = await ai.models.generateContent({
         model: MODELS.planGen,
-        max_tokens: 4096,
-        messages: [
-          {
-            role: "user",
-            content: buildPlanGenerationPrompt(parsed.data.conversationSummary, profileContext),
-          },
-        ],
+        contents: buildPlanGenerationPrompt(parsed.data.conversationSummary, profileContext),
+        config: {
+          temperature: 0.7,
+        }
       });
 
-      const text =
-        response.content[0].type === "text" ? response.content[0].text : "";
+      const text = response.text || "";
       let planData;
       try {
         const cleaned = text
@@ -631,23 +622,19 @@ export async function registerRoutes(
         testCases: testCases || []
       };
 
-      const response = await anthropic.messages.create({
+      const response = await ai.models.generateContent({
         model: MODELS.evaluation,
-        max_tokens: 2048,
-        messages: [
-          {
-            role: "user",
-            content: buildEvaluationPrompt(
-              code,
-              challengeContext,
-              language
-            ),
-          },
-        ],
+        contents: buildEvaluationPrompt(
+          code,
+          challengeContext,
+          language
+        ),
+        config: {
+          temperature: 0.2,
+        }
       });
 
-      const text =
-        response.content[0].type === "text" ? response.content[0].text : "";
+      const text = response.text || "";
       let evaluation;
       try {
         const cleaned = text
@@ -788,9 +775,9 @@ export async function registerRoutes(
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
 
-      let currentMessages: Anthropic.MessageParam[] = messages.map((m) => ({
-        role: m.role,
-        content: m.content,
+      let currentMessages: any[] = messages.map((m) => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.content }],
       }));
 
       const MAX_TOOL_ROUNDS = 5;
@@ -799,37 +786,46 @@ export async function registerRoutes(
       let assistantFinalContent = "";
       while (round < MAX_TOOL_ROUNDS) {
         round++;
-        const response = await anthropic.messages.create({
+        const response = await ai.models.generateContentStream({
           model: MODELS.chat,
-          max_tokens: 8192,
-          system: agenticPrompt,
-          messages: currentMessages,
-          tools: MENTOR_TOOLS,
+          contents: currentMessages,
+          config: {
+            systemInstruction: agenticPrompt,
+            tools: [{ functionDeclarations: MENTOR_TOOLS }],
+            temperature: 0.7,
+          }
         });
 
         let hasToolUse = false;
-        const toolResults: Anthropic.ToolResultBlockParam[] = [];
+        const toolResults: any[] = [];
+        let toolCalls: any[] = [];
 
-        for (const block of response.content) {
-          if (block.type === "text" && block.text) {
-            assistantFinalContent += block.text;
-            const chunks = block.text.split(/(?<=\n)/g).flatMap(line => {
+        for await (const chunk of response) {
+          if (chunk.text) {
+            assistantFinalContent += chunk.text;
+            const textChunks = chunk.text.split(/(?<=\n)/g).flatMap(line => {
               if (line.length <= 200) return [line];
               return line.match(/.{1,200}/g) || [line];
             });
-            for (const chunk of chunks) {
-              res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
+            for (const textChunk of textChunks) {
+              res.write(`data: ${JSON.stringify({ content: textChunk })}\n\n`);
             }
-          } else if (block.type === "tool_use") {
+          }
+          if (chunk.functionCalls && chunk.functionCalls.length > 0) {
             hasToolUse = true;
-            res.write(
-              `data: ${JSON.stringify({ thinking: `Using ${block.name}...` })}\n\n`
-            );
+            for (const call of chunk.functionCalls) {
+              toolCalls.push(call);
+            }
+          }
+        }
 
+        if (hasToolUse) {
+          for (const call of toolCalls) {
+            res.write(`data: ${JSON.stringify({ thinking: `Using ${call.name}...` })}\n\n`);
             try {
               const toolResult = await handleToolCall(
-                block.name,
-                block.input,
+                call.name,
+                call.args,
                 sessionId
               );
 
@@ -840,16 +836,17 @@ export async function registerRoutes(
               }
 
               toolResults.push({
-                type: "tool_result",
-                tool_use_id: block.id,
-                content: toolResult.result,
+                functionResponse: {
+                  name: call.name,
+                  response: { result: toolResult.result }
+                }
               });
             } catch (err: any) {
               toolResults.push({
-                type: "tool_result",
-                tool_use_id: block.id,
-                content: `Error: ${err.message}`,
-                is_error: true,
+                functionResponse: {
+                  name: call.name,
+                  response: { error: err.message }
+                }
               });
             }
           }
@@ -859,11 +856,14 @@ export async function registerRoutes(
           break;
         }
 
-        currentMessages = [
-          ...currentMessages,
-          { role: "assistant", content: response.content },
-          { role: "user", content: toolResults },
-        ];
+        currentMessages.push({
+          role: "model",
+          parts: toolCalls.map(c => ({ functionCall: c }))
+        });
+        currentMessages.push({
+          role: "user",
+          parts: toolResults
+        });
       }
 
       // Save assistant response if conversation exists
@@ -908,19 +908,15 @@ export async function registerRoutes(
 
       console.log(`Generating animation for: ${topic}`);
 
-      const response = await anthropic.messages.create({
+      const response = await ai.models.generateContent({
         model: MODELS.animation,
-        max_tokens: 8192,
-        messages: [
-          {
-            role: "user",
-            content: buildAnimationPrompt(topic, title, description),
-          },
-        ],
+        contents: buildAnimationPrompt(topic, title, description),
+        config: {
+          temperature: 0.7,
+        }
       });
 
-      const text =
-        response.content[0].type === "text" ? response.content[0].text : "";
+      const text = response.text || "";
       let steps;
       try {
         const cleaned = text
