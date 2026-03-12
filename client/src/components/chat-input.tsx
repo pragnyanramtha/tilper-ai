@@ -177,14 +177,14 @@ export function ChatInput({
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          className={`w-full bg-transparent resize-none text-sm px-4 focus:outline-none placeholder:text-muted-foreground/50 ${isLanding ? "pt-4 pb-14 min-h-[100px] text-base" : "pt-3 pb-12 min-h-[48px]"
+          className={`w-full bg-transparent flex-1 resize-none text-sm px-4 focus:outline-none placeholder:text-muted-foreground/50 ${isLanding ? "pt-4 pb-2 min-h-[60px] text-base" : "pt-3 pb-2 min-h-[44px]"
             }`}
           rows={isLanding ? 2 : 1}
           disabled={disabled}
           data-testid={isLanding ? "input-main-chat" : "input-chat"}
         />
 
-        <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between gap-2">
+        <div className="flex bg-transparent items-center justify-between gap-2 px-2 pb-2 mt-auto">
           <div className="flex items-center gap-1.5">
             <input
               ref={fileInputRef}

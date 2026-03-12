@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { keymap } from "@codemirror/view";
+import { acceptCompletion } from "@codemirror/autocomplete";
 
 interface EvaluationResult {
   score: number;
@@ -66,7 +68,12 @@ export function CodeEditor({
     return [];
   };
 
-  const extensions = getExtensions();
+  const extensions = [
+    ...getExtensions(),
+    keymap.of([
+      { key: "Tab", run: acceptCompletion }
+    ])
+  ];
 
   const passedTests = testResults?.filter((t) => t.passed).length ?? 0;
   const totalTests = testResults?.length ?? 0;
