@@ -23,6 +23,9 @@ import {
   Settings,
   BookOpen,
   MessageSquare,
+  GraduationCap,
+  ChevronRight,
+  Sparkles,
 } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 import { useAppContext } from "@/lib/app-context";
@@ -72,7 +75,11 @@ export function AppSidebar() {
     }
   }
 
-  const recentChallenges = (challenges || []).slice(0, 8) as Challenge[];
+  // Build a map from challenge id -> challenge for lookup
+  const challengeMap: Record<number, Challenge> = {};
+  for (const c of (challenges || [])) {
+    challengeMap[c.id] = c;
+  }
   const activePlans = (plans || []).filter(p => p.status === "active") as LearningPlan[];
   const chatHistory = (conversations || []) as Conversation[];
 
@@ -135,40 +142,6 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent className="px-3 py-2">
-        {activePlans.length > 0 && (
-          <SidebarGroup className="mb-4">
-            <SidebarGroupLabel className="text-xs font-semibold tracking-wider text-muted-foreground/70 uppercase px-2 mb-2">Learning Plans</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {activePlans.map((plan) => {
-                  const topics = (plan.topics as any[]) || [];
-                  const completed = topics.filter(t => t.status === "completed").length;
-                  return (
-                    <SidebarMenuItem key={plan.id}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={activePlanId === plan.id}
-                        data-testid={`nav-plan-${plan.id}`}
-                        className="rounded-lg hover:bg-white/10 transition-all duration-200"
-                        onClick={() => {
-                          setActivePlanId(plan.id);
-                          navigate("/");
-                        }}
-                      >
-                        <button className="w-full text-left flex items-center gap-2">
-                          <BookOpen className="w-4 h-4 text-primary/80" />
-                          <span className="truncate text-sm font-medium">{plan.title}</span>
-                          <span className="ml-auto text-xs text-muted-foreground/60 bg-black/5 dark:bg-white/5 px-1.5 py-0.5 rounded-full">{completed}/{topics.length}</span>
-                        </button>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  );
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
-
         {chatHistory.length > 0 && (
           <SidebarGroup className="mb-4">
             <SidebarGroupLabel className="text-xs font-semibold tracking-wider text-muted-foreground/70 uppercase px-2 mb-2">Chat History</SidebarGroupLabel>
@@ -198,44 +171,102 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
 
-        {recentChallenges.length > 0 && (
-          <SidebarGroup>
-            <SidebarGroupLabel className="text-xs font-semibold tracking-wider text-muted-foreground/70 uppercase px-2 mb-2">Recents</SidebarGroupLabel>
-            <SidebarGroupContent>
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-xs font-semibold tracking-wider text-muted-foreground/70 uppercase px-2 mb-2 flex items-center gap-1.5">
+            <GraduationCap className="w-3 h-3" />
+            Learning Paths
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            {activePlans.length === 0 ? (
+              <div className="px-2 py-3 rounded-lg bg-primary/5 border border-primary/10 text-center">
+                <Sparkles className="w-4 h-4 text-primary/50 mx-auto mb-1.5" />
+                <p className="text-[11px] text-muted-foreground/70 leading-snug">
+                  Ask the AI to generate a learning path for you!
+                </p>
+              </div>
+            ) : (
               <SidebarMenu>
-                {recentChallenges.map((challenge) => {
-                  const isCompleted = progressMap[challenge.id]?.status === "completed";
-                  const isActive = location === `/ide` && new URLSearchParams(window.location.search).get("challenge") === String(challenge.id);
+                {activePlans.map((plan) => {
+                  const topics = (plan.topics as any[]) || [];
+                  const isExpanded = activePlanId === plan.id;
                   return (
-                    <SidebarMenuItem key={challenge.id}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={isActive}
-                        data-testid={`nav-challenge-${challenge.id}`}
-                        className={`rounded-lg transition-all duration-200 ${isActive ? "bg-primary/10 text-primary font-medium" : "hover:bg-white/10"}`}
-                      >
-                        <a
-                          href={`/ide?challenge=${challenge.id}`}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            navigate(`/ide?challenge=${challenge.id}`);
+                    <div key={plan.id}>
+                      <SidebarMenuItem>
+                        <SidebarMenuButton
+                          asChild
+                          isActive={isExpanded}
+                          data-testid={`nav-plan-${plan.id}`}
+                          className={`rounded-lg transition-all duration-200 ${
+                            isExpanded ? "bg-primary/10 text-primary font-medium" : "hover:bg-white/10"
+                          }`}
+                          onClick={() => {
+                            setActivePlanId(isExpanded ? null : plan.id);
+                            navigate("/");
                           }}
                         >
-                          {isCompleted ? (
-                            <CheckCircle2 className="w-4 h-4 text-green-500" />
-                          ) : (
-                            <Circle className="w-4 h-4 text-muted-foreground/40" />
-                          )}
-                          <span className="truncate text-sm">{challenge.title}</span>
-                        </a>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
+                          <button className="w-full text-left flex items-center gap-2">
+                            <BookOpen className="w-4 h-4 text-primary/80 flex-shrink-0" />
+                            <span className="truncate text-sm font-medium flex-1">{plan.title}</span>
+                            <ChevronRight
+                              className={`w-3 h-3 text-muted-foreground/50 flex-shrink-0 transition-transform duration-200 ${
+                                isExpanded ? "rotate-90" : ""
+                              }`}
+                            />
+                          </button>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+
+                      {isExpanded && topics.length > 0 && (
+                        <div className="ml-4 mt-0.5 mb-1 border-l border-primary/20 pl-2 space-y-0.5">
+                          {topics.map((topic: any, idx: number) => {
+                            const isCompleted = topic.status === "completed";
+                            // Try to find a challenge for this topic
+                            const linkedChallenge = Object.values(challengeMap).find(
+                              c => c.planId === plan.id && (c.topic === topic.title || c.title === topic.title)
+                            );
+                            const isActive =
+                              linkedChallenge &&
+                              location === "/ide" &&
+                              new URLSearchParams(window.location.search).get("challenge") ===
+                                String(linkedChallenge.id);
+
+                            return (
+                              <div
+                                key={idx}
+                                data-testid={`nav-lesson-${plan.id}-${idx}`}
+                                className={`flex items-start gap-1.5 px-2 py-1.5 rounded-md text-xs cursor-pointer transition-all duration-150 ${
+                                  isActive
+                                    ? "bg-primary/10 text-primary"
+                                    : isCompleted
+                                    ? "text-muted-foreground/60 hover:bg-white/5"
+                                    : "text-foreground/70 hover:bg-white/8"
+                                }`}
+                                onClick={() => {
+                                  if (linkedChallenge) {
+                                    navigate(`/ide?challenge=${linkedChallenge.id}`);
+                                  }
+                                }}
+                              >
+                                {isCompleted ? (
+                                  <CheckCircle2 className="w-3 h-3 text-green-500 flex-shrink-0 mt-0.5" />
+                                ) : (
+                                  <Circle className="w-3 h-3 text-muted-foreground/30 flex-shrink-0 mt-0.5" />
+                                )}
+                                <span className={`leading-snug ${isCompleted ? "line-through" : ""}`}>
+                                  {topic.title}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
+            )}
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
 
       <SidebarFooter className="p-4 bg-transparent">

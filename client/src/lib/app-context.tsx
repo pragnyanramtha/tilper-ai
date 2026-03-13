@@ -5,6 +5,11 @@ type AppMode = "plan" | "learn";
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  linkCard?: {
+    type: "plan" | "challenge";
+    id: number;
+    title: string;
+  };
 }
 
 interface AppContextValue {

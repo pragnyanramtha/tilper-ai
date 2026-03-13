@@ -339,7 +339,7 @@ async function handleToolCall(
       } as any);
 
       return {
-        result: `Challenge created: "${challenge.title}" (${difficulty}, ${language === "python" ? "Python" : "JavaScript"}). The student can open it in the IDE. Tell them about it enthusiastically and include link: [Open Challenge](/ide?challenge=${challenge.id})`,
+        result: `Challenge created: "${challenge.title}" (${difficulty}, ${language === "python" ? "Python" : "JavaScript"}). INSTRUCTION: Tell the student enthusiastically that their challenge is ready. You MUST include this in your response: "You'll find a link card in this chat that takes you directly to the challenge — just click **Open Challenge** to get started!"`,
         metadata: {
           type: "challenge_created",
           challenge: { id: challenge.id, title: challenge.title },
@@ -366,7 +366,7 @@ async function handleToolCall(
         .join("\n");
 
       return {
-        result: `Learning plan "${title}" created with ${formattedTopics.length} topics:\n${topicList}\n\nThe plan is now visible in the sidebar. Walk the student through the topics and suggest starting with the first one immediately.`,
+        result: `Learning plan "${title}" created successfully with ${formattedTopics.length} topics:\n${topicList}\n\nINSTRUCTION: You MUST now tell the student their learning path is ready. Use this EXACT format in your response:\n1. Congratulate them and summarize the plan briefly.\n2. Tell them: "Your learning path is now visible in the **Learning Paths** section on the left sidebar — you can click on it anytime to see your lessons and track your progress!"\n3. Then suggest starting with the first topic immediately.`,
         metadata: { type: "plan_created", plan: { id: plan.id, title } },
       };
     }

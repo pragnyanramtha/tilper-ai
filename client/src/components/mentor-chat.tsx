@@ -1,18 +1,15 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Sparkles, Loader2, Wrench } from "lucide-react";
+import { Sparkles, Wrench, BookOpen, Code2, ExternalLink } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChatInput } from "@/components/chat-input";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAppContext } from "@/lib/app-context";
+import { useLocation } from "wouter";
 import type { UserProfile } from "@shared/schema";
 
-interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
-}
 
 interface MentorChatProps {
   challengeContext?: {
@@ -26,11 +23,13 @@ interface MentorChatProps {
 }
 
 export function MentorChat({ challengeContext, compact = false, currentCode }: MentorChatProps) {
+  const [, navigate] = useLocation();
   const {
     chatMessages: messages,
     setChatMessages: setMessages,
     activeConversationId,
-    setActiveConversationId
+    setActiveConversationId,
+    setActivePlanId,
   } = useAppContext();
 
   const [isStreaming, setIsStreaming] = useState(false);
@@ -66,7 +65,7 @@ export function MentorChat({ challengeContext, compact = false, currentCode }: M
   const sendMessage = async (content: string) => {
     if (!content.trim() || isStreaming) return;
 
-    const userMessage: ChatMessage = { role: "user", content: content.trim() };
+    const userMessage = { role: "user" as const, content: content.trim() };
     setMessages((prev) => [...prev, userMessage]);
     setIsStreaming(true);
     setThinkingMessage(null);
@@ -136,6 +135,10 @@ export function MentorChat({ challengeContext, compact = false, currentCode }: M
       let assistantContent = "";
       let assistantMessageAdded = false;
 
+      // Queue link cards here — inject ONLY after stream is done
+      // so the content streamer (which targets last assistant msg) can't overwrite them
+      const pendingLinkCards: Array<{ type: "plan" | "challenge"; id: number; title: string }> = [];
+
       let streamDone = false;
       while (!streamDone) {
         const { done, value } = await reader.read();
@@ -166,6 +169,22 @@ export function MentorChat({ challengeContext, compact = false, currentCode }: M
             if (data.toolResult) {
               if (data.toolResult.type === "challenge_created") {
                 queryClient.invalidateQueries({ queryKey: ["/api/challenges"] });
+                // Queue — don't inject yet
+                pendingLinkCards.push({
+                  type: "challenge",
+                  id: data.toolResult.challenge.id,
+                  title: data.toolResult.challenge.title,
+                });
+              }
+              if (data.toolResult.type === "plan_created") {
+                queryClient.invalidateQueries({ queryKey: ["/api/plans"] });
+                queryClient.invalidateQueries({ queryKey: ["/api/challenges"] });
+                // Queue — don't inject yet
+                pendingLinkCards.push({
+                  type: "plan",
+                  id: data.toolResult.plan.id,
+                  title: data.toolResult.plan.title,
+                });
               }
             }
 
@@ -178,7 +197,7 @@ export function MentorChat({ challengeContext, compact = false, currentCode }: M
               assistantContent += data.content;
               setMessages((prev) => {
                 const updated = [...prev];
-                if (updated[updated.length - 1].role === "assistant") {
+                if (updated[updated.length - 1].role === "assistant" && !updated[updated.length - 1].linkCard) {
                   updated[updated.length - 1] = {
                     role: "assistant",
                     content: assistantContent,
@@ -191,6 +210,17 @@ export function MentorChat({ challengeContext, compact = false, currentCode }: M
             if (data.done) {
               streamDone = true;
               setThinkingMessage(null);
+              // Now safely append all queued link cards
+              if (pendingLinkCards.length > 0) {
+                setMessages((prev) => [
+                  ...prev,
+                  ...pendingLinkCards.map((card) => ({
+                    role: "assistant" as const,
+                    content: "",
+                    linkCard: card,
+                  })),
+                ]);
+              }
               break;
             }
           } catch { }
@@ -232,44 +262,98 @@ export function MentorChat({ challengeContext, compact = false, currentCode }: M
             </div>
           )}
 
-          {messages.map((msg, i) => (
-            <div
-              key={i}
-              className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-              data-testid={`mentor-message-${msg.role}-${i}`}
-            >
-              {msg.role === "assistant" && (
-                <Avatar className={`${compact ? "w-6 h-6" : "w-7 h-7"} flex-shrink-0 mt-0.5`}>
-                  <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                    <Sparkles className="w-3.5 h-3.5" />
-                  </AvatarFallback>
-                </Avatar>
-              )}
-              <div
-                className={`max-w-[85%] rounded-md px-3 py-2 text-sm ${msg.role === "user"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted"
-                  }`}
-              >
-                {msg.role === "assistant" ? (
-                  <div className="prose prose-sm dark:prose-invert max-w-none [&_pre]:bg-background/50 [&_pre]:p-2 [&_pre]:rounded-md [&_pre]:text-xs [&_code]:text-xs [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1 [&_li]:text-sm [&_blockquote]:border-l-2 [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {msg.content || "\u200B"}
-                    </ReactMarkdown>
+          {messages.map((msg, i) => {
+            // Link card: a special assistant bubble with pre-generated text + action button
+            if (msg.linkCard) {
+              const isPlan = msg.linkCard.type === "plan";
+              const preText = isPlan
+                ? `🎉 Your learning path **"${msg.linkCard.title}"** is ready! You can access the module below:`
+                : `✅ Your challenge **"${msg.linkCard.title}"** is ready! Open it in the IDE below:`;
+              return (
+                <div
+                  key={i}
+                  className="flex gap-2 justify-start animate-in fade-in duration-300"
+                  data-testid={`mentor-message-linkcard-${i}`}
+                >
+                  <Avatar className={`${compact ? "w-6 h-6" : "w-7 h-7"} flex-shrink-0 mt-0.5`}>
+                    <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                      <Sparkles className="w-3.5 h-3.5" />
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="max-w-[85%] rounded-md px-3 py-2.5 bg-muted flex flex-col gap-2.5">
+                    {/* Pre-generated message text */}
+                    <div className="prose prose-sm dark:prose-invert max-w-none [&_p]:my-0 [&_strong]:font-semibold text-sm">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{preText}</ReactMarkdown>
+                    </div>
+                    {/* Inline action button */}
+                    <button
+                      className="group flex items-center gap-2 px-3 py-2 rounded-lg border border-primary/40 bg-primary/10 hover:bg-primary/20 hover:border-primary/60 transition-all duration-200 text-left w-full cursor-pointer"
+                      onClick={() => {
+                        if (isPlan) {
+                          setActivePlanId(msg.linkCard!.id);
+                          navigate("/");
+                        } else {
+                          navigate(`/ide?challenge=${msg.linkCard!.id}`);
+                        }
+                      }}
+                      data-testid={`linkcard-btn-${msg.linkCard.type}-${msg.linkCard.id}`}
+                    >
+                      <div className="flex items-center justify-center w-6 h-6 rounded-md bg-primary/20 group-hover:bg-primary/30 transition-colors flex-shrink-0">
+                        {isPlan ? (
+                          <BookOpen className="w-3.5 h-3.5 text-primary" />
+                        ) : (
+                          <Code2 className="w-3.5 h-3.5 text-primary" />
+                        )}
+                      </div>
+                      <span className="text-sm font-semibold text-primary flex-1 truncate">
+                        {isPlan ? "Open Learning Path" : "Open Challenge"}
+                      </span>
+                      <ExternalLink className="w-3.5 h-3.5 text-primary/60 group-hover:text-primary flex-shrink-0 transition-colors" />
+                    </button>
                   </div>
-                ) : (
-                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                </div>
+              );
+            }
+
+            return (
+              <div
+                key={i}
+                className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                data-testid={`mentor-message-${msg.role}-${i}`}
+              >
+                {msg.role === "assistant" && (
+                  <Avatar className={`${compact ? "w-6 h-6" : "w-7 h-7"} flex-shrink-0 mt-0.5`}>
+                    <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                      <Sparkles className="w-3.5 h-3.5" />
+                    </AvatarFallback>
+                  </Avatar>
+                )}
+                <div
+                  className={`max-w-[85%] rounded-md px-3 py-2 text-sm ${msg.role === "user"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted"
+                    }`}
+                >
+                  {msg.role === "assistant" ? (
+                    <div className="prose prose-sm dark:prose-invert max-w-none [&_pre]:bg-background/50 [&_pre]:p-2 [&_pre]:rounded-md [&_pre]:text-xs [&_code]:text-xs [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1 [&_li]:text-sm [&_blockquote]:border-l-2 [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {msg.content || "\u200B"}
+                      </ReactMarkdown>
+                    </div>
+                  ) : (
+                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                  )}
+                </div>
+                {msg.role === "user" && (
+                  <Avatar className={`${compact ? "w-6 h-6" : "w-7 h-7"} flex-shrink-0 mt-0.5`}>
+                    <AvatarFallback className="bg-secondary text-secondary-foreground text-xs">
+                      {profile?.name?.[0]?.toUpperCase() || "U"}
+                    </AvatarFallback>
+                  </Avatar>
                 )}
               </div>
-              {msg.role === "user" && (
-                <Avatar className={`${compact ? "w-6 h-6" : "w-7 h-7"} flex-shrink-0 mt-0.5`}>
-                  <AvatarFallback className="bg-secondary text-secondary-foreground text-xs">
-                    {profile?.name?.[0]?.toUpperCase() || "U"}
-                  </AvatarFallback>
-                </Avatar>
-              )}
-            </div>
-          ))}
+            );
+          })}
 
           {isStreaming && (
             <div className="flex gap-2 justify-start animate-in fade-in duration-300">
