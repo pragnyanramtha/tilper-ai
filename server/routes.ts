@@ -789,7 +789,7 @@ export async function registerRoutes(
     messages: z.array(
       z.object({
         role: z.enum(["user", "assistant"]),
-        content: z.string().min(1).max(10000),
+        content: z.string().max(10000),
       })
     ),
     systemPrompt: z.string().max(20000).optional(), // Now optional — server builds it
@@ -832,10 +832,28 @@ export async function registerRoutes(
   // Modify /api/mentor/chat to record history if conversationId is provided
   app.post("/api/mentor/chat", async (req, res) => {
     try {
-      const parsed = chatSchema.safeParse(req.body);
+      const incomingMessages = Array.isArray(req.body?.messages)
+        ? req.body.messages
+        : [];
+
+      const sanitizedMessages = incomingMessages
+        .filter((m: any) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
+        .map((m: any) => ({ role: m.role, content: m.content.trim() }))
+        .filter((m: any) => m.content.length > 0)
+        .slice(-50);
+
+      const parsed = chatSchema.safeParse({
+        ...req.body,
+        messages: sanitizedMessages,
+      });
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid request body" });
       }
+
+      if (sanitizedMessages.length === 0) {
+        return res.status(400).json({ error: "At least one non-empty message is required" });
+      }
+
       const { messages, challengeContext, currentCode } = parsed.data;
       const mode = parsed.data.mode || "learn";
       const conversationId = req.body.conversationId; // Extract conversationId from req.body
