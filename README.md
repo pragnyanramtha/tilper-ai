@@ -1,6 +1,6 @@
 # Tilper AI
 
-> An interactive coding education platform for teenage developers, powered by Claude AI
+> An interactive coding education platform for teenage developers, powered by Gemini AI
 
 Tilper AI is a modern, AI-powered learning platform that helps teenagers learn programming through interactive problem-solving, personalized mentorship, and beautiful visual animations. Think of it as having a patient coding tutor available 24/7.
 
@@ -8,13 +8,24 @@ Tilper AI is a modern, AI-powered learning platform that helps teenagers learn p
 ![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.6.3-blue.svg)
 
+## 🚀 Serverless Architecture
+
+**Tilper AI uses a fully client-side architecture with localStorage** - no database required! This means:
+- ✅ Deploy to any serverless platform (Vercel, Netlify, etc.) in seconds
+- ✅ No database configuration or connection pool management
+- ✅ All user data stored in browser localStorage
+- ✅ Only one environment variable needed (`GEMINI_API_KEY`)
+- ✅ Zero cost for data storage
+
+See [SERVERLESS.md](./SERVERLESS.md) for detailed architecture documentation.
+
 ## ✨ Features
 
 ### AI-Powered Learning
-- **Intelligent Mentor**: Claude Sonnet 4.5 provides personalized guidance and explanations
-- **Agentic Tools**: AI can search the web, generate challenges, create learning plans, and remember student details
+- **Intelligent Mentor**: Google Gemini provides personalized guidance and explanations
+- **Agentic Tools**: AI can search the web for real-time information
 - **Adaptive Difficulty**: Challenges adjust to student skill level
-- **Real-time Feedback**: AI evaluates code submissions with detailed feedback
+- **Real-time Feedback**: Streaming AI responses with contextual help
 
 ### Learning Modes
 - **Plan Mode**: AI learns about you and creates personalized learning roadmaps
