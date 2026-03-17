@@ -4,7 +4,7 @@ let appPromise: Promise<any> | null = null;
 
 async function getApp() {
   if (!appPromise) {
-    appPromise = createApp({ serveClient: false }).then(({ app }) => app);
+    appPromise = createApp({ serveClient: false }).then((result) => result.app);
   }
 
   return appPromise;

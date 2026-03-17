@@ -1,7 +1,10 @@
+import { createServer } from "http";
 import { createApp, log } from "./app";
 
 (async () => {
-  const { httpServer } = await createApp({ serveClient: true });
+  const result = await createApp({ serveClient: true });
+  const app = result.app;
+  const httpServer = result.httpServer || createServer(app);
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
   // Other ports are firewalled. Default to 5000 if not specified.
