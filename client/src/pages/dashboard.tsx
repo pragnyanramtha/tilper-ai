@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,14 +13,12 @@ import {
   Code2,
   BookOpen,
   Lightbulb,
-  Wrench,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAppContext } from "@/lib/app-context";
 import { ChatInput, type AttachedFile } from "@/components/chat-input";
-import type { Challenge, UserProfile } from "@shared/schema";
+import { localStorageService } from "@/lib/storage";
 
 const ACTION_PILLS = [
   { label: "Plan", icon: Map, mode: "plan" as const, hint: "Map out your learning journey" },
@@ -58,9 +55,8 @@ export default function Dashboard() {
   const [thinkingMessage, setThinkingMessage] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const { data: profile } = useQuery<UserProfile>({
-    queryKey: ["/api/profile"],
-  });
+  // Load profile from localStorage
+  const profile = localStorageService.getProfile(sessionId);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -71,14 +67,6 @@ export default function Dashboard() {
   if (activePlanId) {
     return <PlanViewer />;
   }
-
-  // System prompt is now built server-side by the prompt engine.
-  // The frontend only sends mode + challenge context as signals.
-  const getMinimalSystemHint = () => {
-    return mode === "plan"
-      ? "Student is in planning mode — help them design their learning journey."
-      : "Student is in learning mode — help them learn, practice, and grow.";
-  };
 
   const sendMessage = async (content: string, _files?: AttachedFile[]) => {
     if (!content.trim() || isStreaming) return;
@@ -91,25 +79,18 @@ export default function Dashboard() {
     let currentConvId = activeConversationId;
 
     try {
-      // If no active conversation, create one
+      // If no active conversation, create one in localStorage
       if (!currentConvId) {
-        const convRes = await fetch("/api/conversations", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-session-id": sessionId,
-          },
-          body: JSON.stringify({
-            title: content.slice(0, 30) + (content.length > 30 ? "..." : ""),
-          }),
-        });
-        if (convRes.ok) {
-          const conv = await convRes.json();
-          currentConvId = conv.id;
-          setActiveConversationId(conv.id);
-          queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
-        }
+        const conv = localStorageService.createConversation(
+          sessionId,
+          content.slice(0, 30) + (content.length > 30 ? "..." : "")
+        );
+        currentConvId = conv.id;
+        setActiveConversationId(conv.id);
       }
+
+      // Save user message to localStorage
+      localStorageService.createMessage(currentConvId, "user", content.trim());
 
       const response = await fetch("/api/mentor/chat", {
         method: "POST",
@@ -122,9 +103,6 @@ export default function Dashboard() {
             role: m.role,
             content: m.content,
           })),
-          systemPrompt: getMinimalSystemHint(),
-          mode,
-          conversationId: currentConvId,
         }),
       });
 
@@ -169,30 +147,12 @@ export default function Dashboard() {
                   return updated;
                 });
               }
-              if (data.done && currentConvId) {
-                // Save assistant message when done
-                await fetch(`/api/conversations/${currentConvId}/messages`, {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    "x-session-id": sessionId,
-                  },
-                  body: JSON.stringify({
-                    role: "assistant",
-                    content: assistantContent,
-                  }),
-                });
+              if (data.done) {
+                // Save assistant message to localStorage
+                if (currentConvId && assistantContent) {
+                  localStorageService.createMessage(currentConvId, "assistant", assistantContent);
+                }
                 break;
-              }
-              if (data.toolResult) {
-                const toolData = data.toolResult;
-                if (toolData.type === "challenge_created" && toolData.challenge) {
-                  queryClient.invalidateQueries({ queryKey: ["/api/challenges"] });
-                  setActiveChallengeId(toolData.challenge.id);
-                }
-                if (toolData.type === "plan_created") {
-                  queryClient.invalidateQueries({ queryKey: ["/api/plans"] });
-                }
               }
             } catch { }
           }
@@ -248,19 +208,19 @@ export default function Dashboard() {
             />
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-2" data-testid="action-pills">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 w-full max-w-xl">
             {ACTION_PILLS.map((pill) => (
-              <Button
+              <button
                 key={pill.label}
-                variant="outline"
-                size="sm"
-                className="gap-1.5 rounded-full"
                 onClick={() => handlePillClick(pill)}
-                data-testid={`pill-${pill.label.toLowerCase()}`}
+                className="group relative flex flex-col items-center justify-center gap-2 p-4 rounded-xl border border-border bg-card hover:bg-accent hover:border-primary transition-all"
               >
-                <pill.icon className="w-3.5 h-3.5" />
-                {pill.label}
-              </Button>
+                <pill.icon className="w-6 h-6 text-muted-foreground group-hover:text-primary transition-colors" />
+                <span className="text-sm font-medium">{pill.label}</span>
+                <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                  {pill.hint}
+                </span>
+              </button>
             ))}
           </div>
         </div>
@@ -270,98 +230,86 @@ export default function Dashboard() {
 
   return (
     <div className="h-full flex flex-col">
-      {isInChat && chatMessages.length === 0 && (
-        <div className="flex-1 flex flex-col items-center justify-center px-4">
-          <div className="text-center mb-4">
-            <div className="flex items-center justify-center gap-2 mb-2">
-              <Badge variant="outline" className="gap-1.5 text-xs no-default-hover-elevate no-default-active-elevate">
-                {mode === "plan" ? <Map className="w-3 h-3" /> : <GraduationCap className="w-3 h-3" />}
-                {mode === "plan" ? "Plan mode" : "Learn mode"}
-              </Badge>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {mode === "plan"
-                ? "Tell me about your goals and I'll help you map out a learning journey"
-                : "Ask me anything about coding - I'm here to help you learn"}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {chatMessages.length > 0 && (
-        <ScrollArea className="flex-1 min-h-0" ref={scrollRef}>
-          <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
-            {chatMessages.map((msg, i) => (
+      <ScrollArea ref={scrollRef} className="flex-1 px-4 py-6">
+        <div className="max-w-3xl mx-auto space-y-6">
+          {chatMessages.map((message, idx) => (
+            <div
+              key={idx}
+              className={`flex gap-3 ${
+                message.role === "user" ? "justify-end" : "justify-start"
+              }`}
+            >
+              {message.role === "assistant" && (
+                <Avatar className="h-8 w-8 flex-shrink-0">
+                  <AvatarFallback className="bg-primary text-primary-foreground">
+                    <Sparkles className="w-4 h-4" />
+                  </AvatarFallback>
+                </Avatar>
+              )}
               <div
-                key={i}
-                className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                data-testid={`chat-message-${msg.role}-${i}`}
+                className={`flex flex-col gap-1 max-w-[80%] ${
+                  message.role === "user" ? "items-end" : "items-start"
+                }`}
               >
-                {msg.role === "assistant" && (
-                  <Avatar className="w-7 h-7 flex-shrink-0 mt-0.5">
-                    <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                      <Sparkles className="w-3.5 h-3.5" />
-                    </AvatarFallback>
-                  </Avatar>
-                )}
                 <div
-                  className={`max-w-[80%] rounded-md px-3.5 py-2.5 text-sm ${msg.role === "user"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted"
-                    }`}
+                  className={`rounded-2xl px-4 py-3 ${
+                    message.role === "user"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted"
+                  }`}
                 >
-                  {msg.role === "assistant" ? (
-                    <div className="prose prose-sm dark:prose-invert max-w-none [&_pre]:bg-background/50 [&_pre]:p-2 [&_pre]:rounded-md [&_pre]:text-xs [&_code]:text-xs [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1 [&_li]:text-sm [&_blockquote]:border-l-2 [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground">
+                  {message.role === "assistant" ? (
+                    <div className="prose prose-sm dark:prose-invert max-w-none">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {msg.content || "\u200B"}
+                        {message.content}
                       </ReactMarkdown>
                     </div>
                   ) : (
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                   )}
                 </div>
-                {msg.role === "user" && (
-                  <Avatar className="w-7 h-7 flex-shrink-0 mt-0.5">
-                    <AvatarFallback className="bg-secondary text-secondary-foreground text-xs">
-                      {profile?.name?.[0]?.toUpperCase() || "U"}
-                    </AvatarFallback>
-                  </Avatar>
-                )}
               </div>
-            ))}
-
-            {isStreaming && (
-              <div className="flex gap-3 justify-start animate-in fade-in duration-300">
-                <Avatar className="w-7 h-7 flex-shrink-0 mt-0.5">
-                  <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                    <Sparkles className="w-3.5 h-3.5" />
+              {message.role === "user" && (
+                <Avatar className="h-8 w-8 flex-shrink-0">
+                  <AvatarFallback>
+                    {profile?.name?.[0]?.toUpperCase() || "U"}
                   </AvatarFallback>
                 </Avatar>
-                <div className="bg-muted rounded-md px-3.5 py-2.5 flex flex-col gap-1.5">
-                  {thinkingMessage && (
-                    <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-medium pb-1 border-b border-white/5">
-                      <Wrench className="w-2.5 h-2.5 animate-pulse" />
-                      <span>{thinkingMessage}</span>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-1">
-                    <div className="w-1 h-1 bg-primary/60 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                    <div className="w-1 h-1 bg-primary/60 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                    <div className="w-1 h-1 bg-primary/60 rounded-full animate-bounce" />
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </ScrollArea>
-      )}
+              )}
+            </div>
+          ))}
 
-      <div className="border-t p-3">
-        <div className="max-w-2xl mx-auto">
+          {thinkingMessage && (
+            <div className="flex gap-3 justify-start">
+              <Avatar className="h-8 w-8 flex-shrink-0">
+                <AvatarFallback className="bg-primary text-primary-foreground">
+                  <Sparkles className="w-4 h-4" />
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex items-center gap-2 px-4 py-3 bg-muted rounded-2xl">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="text-sm text-muted-foreground">{thinkingMessage}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </ScrollArea>
+
+      <div className="border-t bg-background p-4">
+        <div className="max-w-3xl mx-auto">
+          <div className="flex items-center gap-2 mb-2">
+            <Badge variant={mode === "plan" ? "default" : "secondary"}>
+              {mode === "plan" ? "Planning Mode" : "Learning Mode"}
+            </Badge>
+          </div>
           <ChatInput
             onSend={sendMessage}
             disabled={isStreaming}
-            placeholder={mode === "plan" ? "Tell me about your learning goals..." : "Ask me anything..."}
+            placeholder={
+              mode === "plan"
+                ? "Tell me about your goals and I'll help plan your journey..."
+                : "Ask me anything or tell me what you want to practice..."
+            }
             mode={mode}
             onModeChange={handleModeChange}
             variant="inline"

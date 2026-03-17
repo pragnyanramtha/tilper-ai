@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
 import {
   Sidebar,
   SidebarContent,
@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 import { useAppContext } from "@/lib/app-context";
-import type { Challenge, UserProgress, LearningPlan, Conversation } from "@shared/schema";
+import { localStorageService, type Challenge, type UserProgress, type LearningPlan, type Conversation } from "@/lib/storage";
 
 export function AppSidebar() {
   const [location, navigate] = useLocation();
@@ -45,28 +45,27 @@ export function AppSidebar() {
     setActivePlanId,
   } = useAppContext();
 
-  const { data: challenges } = useQuery<Challenge[]>({
-    queryKey: ["/api/challenges"],
-  });
+  // Load data from localStorage
+  const [challenges, setChallenges] = useState<Challenge[]>([]);
+  const [progressList, setProgressList] = useState<UserProgress[]>([]);
+  const [plans, setPlans] = useState<LearningPlan[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
 
-  const { data: progressList } = useQuery<UserProgress[]>({
-    queryKey: ["/api/progress"],
-  });
+  useEffect(() => {
+    // Load data from localStorage
+    const loadData = () => {
+      setChallenges(localStorageService.getChallengesBySession(sessionId));
+      setProgressList(localStorageService.getProgress(sessionId));
+      setPlans(localStorageService.getLearningPlans(sessionId));
+      setConversations(localStorageService.getConversations(sessionId));
+    };
 
-  const { data: plans } = useQuery<LearningPlan[]>({
-    queryKey: ["/api/plans"],
-  });
+    loadData();
 
-  const { data: conversations } = useQuery<Conversation[]>({
-    queryKey: ["/api/conversations"],
-    queryFn: async () => {
-      const res = await fetch("/api/conversations", {
-        headers: { "x-session-id": sessionId }
-      });
-      if (!res.ok) throw new Error("Failed to fetch conversations");
-      return res.json();
-    }
-  });
+    // Set up an interval to refresh data periodically (in case it changes)
+    const interval = setInterval(loadData, 1000);
+    return () => clearInterval(interval);
+  }, [sessionId]);
 
   const progressMap: Record<number, UserProgress> = {};
   if (progressList) {
@@ -98,15 +97,13 @@ export function AppSidebar() {
     setIsInChat(true);
     setMode("learn");
 
-    // Fetch messages for this conversation
-    const res = await fetch(`/api/conversations/${conv.id}/messages`);
-    if (res.ok) {
-      const messages = await res.json();
-      setChatMessages(messages.map((m: any) => ({
-        role: m.role,
-        content: m.content
-      })));
-    }
+    // Load messages from localStorage
+    const messages = localStorageService.getMessages(conv.id);
+    setChatMessages(messages.map((m) => ({
+      role: m.role,
+      content: m.content
+    })));
+
     navigate("/");
   };
 
