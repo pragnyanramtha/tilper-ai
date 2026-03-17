@@ -1,6 +1,5 @@
 import "dotenv/config";
 import express, { type Request, type Response, type NextFunction } from "express";
-import { createServer } from "http";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { storage } from "./storage";
@@ -14,6 +13,7 @@ declare module "http" {
 
 export type CreateAppOptions = {
   serveClient?: boolean;
+  skipSeed?: boolean;
 };
 
 export function log(message: string, source = "express") {
@@ -27,10 +27,12 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
+// Singleton to track if seeding has been done
+let hasSeeded = false;
+
 export async function createApp(options: CreateAppOptions = {}) {
-  const { serveClient = true } = options;
+  const { serveClient = false, skipSeed = false } = options;
   const app = express();
-  const httpServer = createServer(app);
 
   app.use(
     express.json({
@@ -68,8 +70,13 @@ export async function createApp(options: CreateAppOptions = {}) {
     next();
   });
 
-  await seedDatabase(storage);
-  await registerRoutes(httpServer, app);
+  // Only seed once in serverless environments
+  if (!skipSeed && !hasSeeded) {
+    await seedDatabase(storage);
+    hasSeeded = true;
+  }
+
+  await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
@@ -88,10 +95,14 @@ export async function createApp(options: CreateAppOptions = {}) {
     if (process.env.NODE_ENV === "production") {
       serveStatic(app);
     } else {
+      // For local dev, we still need the HTTP server for Vite
+      const { createServer } = await import("http");
+      const httpServer = createServer(app);
       const { setupVite } = await import("./vite");
       await setupVite(httpServer, app);
+      return { app, httpServer };
     }
   }
 
-  return { app, httpServer };
+  return { app };
 }

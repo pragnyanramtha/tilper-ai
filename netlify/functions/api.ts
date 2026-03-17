@@ -5,8 +5,8 @@ let handlerPromise: Promise<any> | null = null;
 
 async function getHandler() {
   if (!handlerPromise) {
-    handlerPromise = createApp({ serveClient: false }).then(({ app }) => {
-      return serverless(app);
+    handlerPromise = createApp({ serveClient: false }).then((result) => {
+      return serverless(result.app);
     });
   }
 

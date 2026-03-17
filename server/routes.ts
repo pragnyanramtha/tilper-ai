@@ -1,5 +1,4 @@
 import type { Express } from "express";
-import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
 import { z } from "zod";
@@ -383,9 +382,8 @@ async function handleToolCall(
 }
 
 export async function registerRoutes(
-  httpServer: Server,
   app: Express
-): Promise<Server> {
+): Promise<void> {
   // ─── Profile Routes ───
 
   app.get("/api/profile", async (req, res) => {
@@ -1086,6 +1084,4 @@ export async function registerRoutes(
       res.status(500).json({ error: "Failed to generate animation" });
     }
   });
-
-  return httpServer;
 }
