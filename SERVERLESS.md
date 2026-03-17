@@ -47,6 +47,16 @@ netlify deploy --prod
 Set environment variable:
 - `GEMINI_API_KEY`: Your Google Gemini API key
 
+### Render
+1. Create a new Web Service on [Render](https://render.com)
+2. Connect your repository
+3. Set build command: `npm install && npm run build`
+4. Set start command: `npm run start`
+5. Add environment variable:
+   - `GEMINI_API_KEY`: Your Google Gemini API key
+
+**Note**: The app is configured to allow `*.onrender.com` hosts in `vite.config.ts`.
+
 ### Other Platforms
 The app works on any platform that supports:
 1. Node.js serverless functions

@@ -23,4 +23,12 @@ export default defineConfig({
       deny: ["**/.*"],
     },
   },
+  preview: {
+    allowedHosts: [
+      "tilper-ai.onrender.com",
+      ".onrender.com",
+      ".vercel.app",
+      ".netlify.app",
+    ],
+  },
 });
