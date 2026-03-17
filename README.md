@@ -69,7 +69,7 @@ Tilper AI is a modern, AI-powered learning platform that helps teenagers learn p
 - **In-Memory Storage** - Quick start without database
 
 ### AI Integration
-- **Anthropic Claude API** - Powered by Claude Sonnet 4.5
+- **Google Gemini API** - Powered by Gemini 3.1 Flash Lite
 - **Streaming Responses** - Real-time chat with Server-Sent Events
 - **Tool Use**: Web search, challenge generation, plan creation, memory storage
 - **Smart Routing**: Sonnet for reasoning, Haiku for structured output
@@ -85,7 +85,7 @@ Tilper AI is a modern, AI-powered learning platform that helps teenagers learn p
 ### Prerequisites
 - Node.js 18+ 
 - npm or pnpm
-- Anthropic API key ([Get one here](https://console.anthropic.com/))
+- Google AI Studio API key ([Get one here](https://aistudio.google.com/app/apikey))
 
 ### Installation
 
@@ -107,9 +107,9 @@ pnpm install
 cp .env.example .env
 ```
 
-Edit `.env` and add your Anthropic API key:
+Edit `.env` and add your Gemini API key:
 ```env
-ANTHROPIC_API_KEY=sk-ant-api03-your-key-here
+GEMINI_API_KEY=your_gemini_api_key_here
 PORT=5000
 NODE_ENV=development
 ```
@@ -296,7 +296,7 @@ npm run db:push
 
 ### Environment Variables
 Set these in your hosting platform:
-- `ANTHROPIC_API_KEY` - Your Claude API key
+- `GEMINI_API_KEY` - Your Google Gemini API key
 - `DATABASE_URL` - PostgreSQL connection (optional)
 - `NODE_ENV` - Set to `production`
 - `PORT` - Usually auto-set by platform
@@ -324,7 +324,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🙏 Acknowledgments
 
-- **Anthropic** - For the amazing Claude AI
+- **Google Gemini** - For the AI model APIs
 - **3Blue1Brown** - Inspiration for animation system
 - **Shadcn** - Beautiful UI components
 - **Vercel** - React and Next.js ecosystem

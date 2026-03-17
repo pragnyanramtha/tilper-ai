@@ -5,11 +5,11 @@ echo.
 
 REM Check if .env exists and has the API key set
 if exist .env (
-    findstr /C:"your_claude_api_key_here" .env > nul
+    findstr /C:"your_gemini_api_key_here" .env > nul
     if not errorlevel 1 (
-        echo ⚠️  WARNING: Please update your .env file with your actual Claude API key!
-        echo    1. Get your API key from: https://console.anthropic.com/
-        echo    2. Replace 'your_claude_api_key_here' in the .env file with your actual key
+        echo ⚠️  WARNING: Please update your .env file with your actual Gemini API key!
+        echo    1. Get your API key from: https://aistudio.google.com/app/apikey
+        echo    2. Replace 'your_gemini_api_key_here' in the .env file with your actual key
         echo.
         pause
     )

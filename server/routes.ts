@@ -12,8 +12,50 @@ import {
   type StudentContext,
 } from "./prompts";
 
+function resolveGeminiApiKey(): string {
+  const candidate =
+    process.env.GEMINI_API_KEY ??
+    process.env.GOOGLE_API_KEY ??
+    process.env.GOOGLE_GENAI_API_KEY;
+
+  if (!candidate) {
+    throw new Error(
+      "Missing Gemini API key. Set GEMINI_API_KEY (or GOOGLE_API_KEY/GOOGLE_GENAI_API_KEY) in .env."
+    );
+  }
+
+  // Trim whitespace and optional wrapping quotes that can appear in copied .env values.
+  const normalized = candidate.trim().replace(/^['\"]|['\"]$/g, "");
+
+  if (!normalized) {
+    throw new Error(
+      "Gemini API key is empty after trimming. Check your .env formatting for GEMINI_API_KEY."
+    );
+  }
+
+  if (normalized === "your_gemini_api_key_here") {
+    throw new Error(
+      "GEMINI_API_KEY is still set to the placeholder value in .env. Replace it with your real Google AI Studio key."
+    );
+  }
+
+  if (normalized.startsWith("sk-ant-")) {
+    throw new Error(
+      "Detected an Anthropic key in Gemini config. This server uses Google Gemini and requires a Google AI Studio API key in GEMINI_API_KEY."
+    );
+  }
+
+  if (!normalized.startsWith("AIza")) {
+    throw new Error(
+      "GEMINI_API_KEY format looks invalid. Google AI Studio keys usually start with 'AIza'."
+    );
+  }
+
+  return normalized;
+}
+
 const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
+  apiKey: resolveGeminiApiKey(),
 });
 
 // ─── Model Routing ───
