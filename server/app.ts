@@ -2,8 +2,6 @@ import "dotenv/config";
 import express, { type Request, type Response, type NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
-import { storage } from "./storage";
-import { seedDatabase } from "./seed";
 
 declare module "http" {
   interface IncomingMessage {
@@ -13,7 +11,6 @@ declare module "http" {
 
 export type CreateAppOptions = {
   serveClient?: boolean;
-  skipSeed?: boolean;
 };
 
 export function log(message: string, source = "express") {
@@ -27,11 +24,8 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
-// Singleton to track if seeding has been done
-let hasSeeded = false;
-
 export async function createApp(options: CreateAppOptions = {}) {
-  const { serveClient = false, skipSeed = false } = options;
+  const { serveClient = false } = options;
   const app = express();
 
   app.use(
@@ -69,12 +63,6 @@ export async function createApp(options: CreateAppOptions = {}) {
 
     next();
   });
-
-  // Only seed once in serverless environments
-  if (!skipSeed && !hasSeeded) {
-    await seedDatabase(storage);
-    hasSeeded = true;
-  }
 
   await registerRoutes(app);
 
