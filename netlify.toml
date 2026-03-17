@@ -3,6 +3,10 @@
   publish = "dist/public"
   functions = "netlify/functions"
 
+[functions]
+  node_bundler = "esbuild"
+  external_node_modules = ["@babel/preset-typescript", "lightningcss", "vite", "esbuild"]
+
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/api"
